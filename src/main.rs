@@ -1,5 +1,7 @@
 use log::info;
+use webgpu_demo::{Vertex, VERTICES};
 use wgpu::include_wgsl;
+use wgpu::util::DeviceExt;
 use winit::window::Window;
 use winit::{
     event::*,
@@ -15,6 +17,7 @@ struct State {
     size: winit::dpi::PhysicalSize<u32>,
     window: Window,
     render_pipeline: wgpu::RenderPipeline,
+    vertex_buffer: wgpu::Buffer,
 }
 
 impl State {
@@ -96,13 +99,15 @@ impl State {
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: "vs_main", // 1.
-                buffers: &[], // 2.
+                entry_point: "vs_main",     // 1.
+                buffers: &[Vertex::desc()], // 2.
             },
-            fragment: Some(wgpu::FragmentState { // 3.
+            fragment: Some(wgpu::FragmentState {
+                // 3.
                 module: &shader,
                 entry_point: "fs_main",
-                targets: &[Some(wgpu::ColorTargetState { // 4.
+                targets: &[Some(wgpu::ColorTargetState {
+                    // 4.
                     format: config.format,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
@@ -124,13 +129,18 @@ impl State {
             // continued ...
             depth_stencil: None, // 1.
             multisample: wgpu::MultisampleState {
-                count: 1, // 2.
-                mask: !0, // 3.
+                count: 1,                         // 2.
+                mask: !0,                         // 3.
                 alpha_to_coverage_enabled: false, // 4.
             },
             multiview: None, // 5.
         });
 
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(VERTICES),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
 
         Self {
             window,
@@ -139,7 +149,8 @@ impl State {
             queue,
             config,
             size,
-            render_pipeline
+            render_pipeline,
+            vertex_buffer,
         }
     }
 
@@ -184,24 +195,23 @@ impl State {
                         view: &view,
                         resolve_target: None,
                         ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(
-                                wgpu::Color {
-                                    r: 0.1,
-                                    g: 0.2,
-                                    b: 0.3,
-                                    a: 1.0,
-                                }
-                            ),
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: 0.1,
+                                g: 0.2,
+                                b: 0.3,
+                                a: 1.0,
+                            }),
                             store: true,
-                        }
-                    })
+                        },
+                    }),
                 ],
                 depth_stencil_attachment: None,
             });
 
             // 新添加!
             render_pass.set_pipeline(&self.render_pipeline); // 2.
-            render_pass.draw(0..3, 0..1); // 3.
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.draw(0..3, 0..1);
         }
 
         // submit 命令能接受任何实现了 IntoIter trait 的参数
