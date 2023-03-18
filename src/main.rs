@@ -18,6 +18,7 @@ struct State {
     window: Window,
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
+    num_vertices: u32,
     index_buffer: wgpu::Buffer,
     num_indices: u32,
 }
@@ -62,7 +63,7 @@ impl State {
                     },
                     label: None,
                 },
-                None, // Trace path
+                None,
             )
             .await
             .unwrap();
@@ -101,25 +102,22 @@ impl State {
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: "vs_main",     // 1.
-                buffers: &[Vertex::desc()], // 2.
+                entry_point: "vs_main",
+                buffers: &[Vertex::desc()],
             },
             fragment: Some(wgpu::FragmentState {
-                // 3.
                 module: &shader,
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
-                    // 4.
                     format: config.format,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
-            // continued ...
             primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList, // 1.
+                topology: wgpu::PrimitiveTopology::TriangleStrip, // TriangleStrip 就是以锯齿形顺序绘制，每绘制一次反转一次
                 strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw, // 2.
+                front_face: wgpu::FrontFace::Ccw, // 第一组三角形的顶点需要是逆时针的
                 cull_mode: Some(wgpu::Face::Back),
                 // 将此设置为 Fill 以外的任何值都要需要开启 Feature::NON_FILL_POLYGON_MODE
                 polygon_mode: wgpu::PolygonMode::Fill,
@@ -128,14 +126,13 @@ impl State {
                 // 需要开启 Features::CONSERVATIVE_RASTERIZATION
                 conservative: false,
             },
-            // continued ...
             depth_stencil: None, // 1.
             multisample: wgpu::MultisampleState {
-                count: 1,                         // 2.
-                mask: !0,                         // 3.
-                alpha_to_coverage_enabled: false, // 4.
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
             },
-            multiview: None, // 5.
+            multiview: None,
         });
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -150,6 +147,7 @@ impl State {
             usage: wgpu::BufferUsages::INDEX,
         });
 
+        let num_vertices = VERTICES.len() as u32;
         let num_indices = INDICES.len() as u32;
 
         Self {
@@ -161,6 +159,7 @@ impl State {
             size,
             render_pipeline,
             vertex_buffer,
+            num_vertices,
             index_buffer,
             num_indices,
         }
@@ -198,7 +197,6 @@ impl State {
             });
 
         {
-            // 1.
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[
@@ -222,8 +220,15 @@ impl State {
 
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            // {
+            //     render_pass.draw(0..self.num_vertices, 0..1);
+            // }
+            // same result as below
+            {
+                render_pass
+                    .set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            }
         }
 
         // submit 命令能接受任何实现了 IntoIter trait 的参数
