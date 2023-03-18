@@ -18,6 +18,7 @@ struct State {
     window: Window,
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
+    num_vertices: u32,
 }
 
 impl State {
@@ -142,6 +143,8 @@ impl State {
             usage: wgpu::BufferUsages::VERTEX,
         });
 
+        let num_vertices = VERTICES.len() as u32;
+
         Self {
             window,
             surface,
@@ -151,6 +154,7 @@ impl State {
             size,
             render_pipeline,
             vertex_buffer,
+            num_vertices,
         }
     }
 
@@ -211,7 +215,7 @@ impl State {
             // 新添加!
             render_pass.set_pipeline(&self.render_pipeline); // 2.
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.draw(0..3, 0..1);
+            render_pass.draw(0..self.num_vertices, 0..1);
         }
 
         // submit 命令能接受任何实现了 IntoIter trait 的参数
