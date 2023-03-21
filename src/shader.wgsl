@@ -1,7 +1,5 @@
-// 顶点着色器
-
 struct VertexInput {
-    @location(0) position: vec3<f32>,
+    @location(0) position: vec4<f32>,
     @location(1) color: vec4<f32>,
 };
 
@@ -16,11 +14,9 @@ fn vs_main(
 ) -> VertexOutput {
     var out: VertexOutput;
         out.color = model.color;
-        out.clip_position = vec4<f32>(model.position, 1.0);
+        out.clip_position = model.position;
     return out;
 }
-
-// 片元着色器
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
