@@ -5,6 +5,7 @@ pub struct Vertex {
     color: [f32; 4],
 }
 
+#[allow(dead_code)]
 impl Vertex {
     #[inline(always)]
     pub const fn from_i8(pos: [i8; 3], color: [i8; 3]) -> Self {
