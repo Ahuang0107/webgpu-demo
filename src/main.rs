@@ -37,7 +37,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         )
         .await?;
 
-    let config = surface
+    let mut config = surface
         .get_default_config(&adapter, size.width, size.height)
         .expect("surface isn't supported by the adapter.");
     surface.configure(&device, &config);
@@ -75,17 +75,6 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         multiview: None,
     });
 
-    let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Vertex Buffer"),
-        contents: bytemuck::cast_slice(vertex::VERTICES),
-        usage: wgpu::BufferUsages::VERTEX,
-    });
-    let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Index Buffer"),
-        contents: bytemuck::cast_slice(vertex::INDICES),
-        usage: wgpu::BufferUsages::INDEX,
-    });
-
     log::info!("Entering render loop...");
     event_loop.run(move |event, _, control_flow| match event {
         winit::event::Event::RedrawRequested(_) => {
@@ -99,6 +88,32 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
             {
+                let p0 = (50.0_f32, 50.0);
+                let p1 = (50.0_f32, 150.0);
+                let p2 = (150.0_f32, 150.0);
+                let p3 = (150.0_f32, 50.0);
+                let size = window.inner_size();
+                let w_2 = (size.width / 2) as f32;
+                let h_2 = (size.height / 2) as f32;
+                let center = (w_2, h_2);
+                let p0_v = vertex::Vertex::new((p0.0 - center.0) / w_2, -(p0.1 - center.1) / h_2);
+                let p1_v = vertex::Vertex::new((p1.0 - center.0) / w_2, -(p1.1 - center.1) / h_2);
+                let p2_v = vertex::Vertex::new((p2.0 - center.0) / w_2, -(p2.1 - center.1) / h_2);
+                let p3_v = vertex::Vertex::new((p3.0 - center.0) / w_2, -(p3.1 - center.1) / h_2);
+
+                let vertices: &[vertex::Vertex] = &[p0_v, p1_v, p2_v, p3_v];
+                let indices: &[u16] = &[0, 1, 2, 0, 2, 3];
+
+                let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Vertex Buffer"),
+                    contents: bytemuck::cast_slice(vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+                let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Index Buffer"),
+                    contents: bytemuck::cast_slice(indices),
+                    usage: wgpu::BufferUsages::INDEX,
+                });
                 let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: None,
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -116,13 +131,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                     })],
                     depth_stencil_attachment: None,
                 });
-                render_pass.push_debug_group("Prepare data for draw.");
                 render_pass.set_pipeline(&render_pipeline);
                 render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
                 render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-                render_pass.pop_debug_group();
-                render_pass.insert_debug_marker("Draw!");
-                render_pass.draw_indexed(0..vertex::INDICES.len() as u32, 0, 0..1);
+                render_pass.draw_indexed(0..indices.len() as u32, 0, 0..1);
             }
             queue.submit(Some(encoder.finish()));
 
@@ -134,6 +146,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         winit::event::Event::WindowEvent { event, .. } => match event {
             winit::event::WindowEvent::CloseRequested => {
                 *control_flow = winit::event_loop::ControlFlow::Exit;
+            }
+            winit::event::WindowEvent::Resized(physical_size) => {
+                config.width = physical_size.width;
+                config.height = physical_size.height;
+                surface.configure(&device, &config);
             }
             _ => {}
         },
