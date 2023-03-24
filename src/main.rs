@@ -1,3 +1,4 @@
+use image::GenericImageView;
 use wgpu::util::DeviceExt;
 
 mod vertex;
@@ -42,9 +43,32 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .expect("surface isn't supported by the adapter.");
     surface.configure(&device, &config);
 
+    let texture_bind_group_layout =
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+            label: None,
+        });
+    let diffuse_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        layout: &texture_bind_group_layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: wgpu::BindingResource::TextureView(&diffuse_texture_view),
+        }],
+        label: Some("diffuse_bind_group"),
+    });
+
     let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[],
+        bind_group_layouts: &[&texture_bind_group_layout],
         push_constant_ranges: &[],
     });
 
@@ -88,21 +112,15 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
             {
-                let p0 = (50.0_f32, 50.0);
-                let p1 = (50.0_f32, 150.0);
-                let p2 = (150.0_f32, 150.0);
-                let p3 = (150.0_f32, 50.0);
-                let size = window.inner_size();
-                let w_2 = (size.width / 2) as f32;
-                let h_2 = (size.height / 2) as f32;
-                let center = (w_2, h_2);
-                let p0_v = vertex::Vertex::new((p0.0 - center.0) / w_2, -(p0.1 - center.1) / h_2);
-                let p1_v = vertex::Vertex::new((p1.0 - center.0) / w_2, -(p1.1 - center.1) / h_2);
-                let p2_v = vertex::Vertex::new((p2.0 - center.0) / w_2, -(p2.1 - center.1) / h_2);
-                let p3_v = vertex::Vertex::new((p3.0 - center.0) / w_2, -(p3.1 - center.1) / h_2);
-
-                let vertices: &[vertex::Vertex] = &[p0_v, p1_v, p2_v, p3_v];
-                let indices: &[u16] = &[0, 1, 2, 0, 2, 3];
+                let vertices: &[vertex::Vertex] = &[
+                    vertex::Vertex::new(-0.0868241, 0.49240386, 0.4131759, 1.0 - 0.99240386),
+                    vertex::Vertex::new(-0.49513406, 0.06958647, 0.0048659444, 1.0 - 0.56958647),
+                    vertex::Vertex::new(-0.21918549, -0.44939706, 0.28081453, 1.0 - 0.05060294),
+                    vertex::Vertex::new(0.35966998, -0.3473291, 0.85967, 1.0 - 0.1526709),
+                    vertex::Vertex::new(0.44147372, 0.2347359, 0.9414737, 1.0 - 0.7347359),
+                ];
+                println!("{:?}", vertices);
+                let indices: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4, /* padding */ 0];
 
                 let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("Vertex Buffer"),
@@ -132,6 +150,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                     depth_stencil_attachment: None,
                 });
                 render_pass.set_pipeline(&render_pipeline);
+                render_pass.set_bind_group(0, &diffuse_bind_group, &[]);
                 render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
                 render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
                 render_pass.draw_indexed(0..indices.len() as u32, 0, 0..1);
