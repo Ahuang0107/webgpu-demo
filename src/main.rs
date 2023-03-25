@@ -1,5 +1,6 @@
 use wgpu::util::DeviceExt;
 
+mod camera;
 mod vertex;
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -45,44 +46,42 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .expect("surface isn't supported by the adapter.");
     surface.configure(&device, &config);
 
-    let transform = glam::Mat4::from_mat3(glam::Mat3 {
-        x_axis: glam::Vec3::new(0.5, 0.0, 0.0),
-        y_axis: glam::Vec3::new(0.0, 0.5, 0.0),
-        z_axis: glam::Vec3::new(0.0, 0.0, 0.5),
-    });
-    log::info!("world transform: {}", transform);
-    let transform_bytes = bytemuck::bytes_of(transform.as_ref());
-    let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        contents: transform_bytes,
+    let camera = camera::Camera::new(size.width as f32, size.height as f32);
+    let mut camera_uniform = camera::CameraUniform::new();
+    camera_uniform.update_view_proj(&camera);
+    log::info!("camera uniform: {:?}", camera_uniform);
+    let camera_uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        contents: bytemuck::cast_slice(&[camera_uniform]),
         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         label: None,
     });
 
-    let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        entries: &[wgpu::BindGroupLayoutEntry {
-            binding: 0,
-            visibility: wgpu::ShaderStages::VERTEX,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: wgpu::BufferSize::new(transform_bytes.len() as u64),
-            },
-            count: None,
-        }],
-        label: None,
-    });
-    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        layout: &bind_group_layout,
+    let camera_bind_group_layout =
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+            label: None,
+        });
+    let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        layout: &camera_bind_group_layout,
         entries: &[wgpu::BindGroupEntry {
             binding: 0,
-            resource: uniform_buffer.as_entire_binding(),
+            resource: camera_uniform_buffer.as_entire_binding(),
         }],
         label: None,
     });
 
     let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[&bind_group_layout],
+        bind_group_layouts: &[&camera_bind_group_layout],
         push_constant_ranges: &[],
     });
 
@@ -172,7 +171,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                     depth_stencil_attachment: None,
                 });
                 render_pass.set_pipeline(&render_pipeline);
-                render_pass.set_bind_group(0, &bind_group, &[]);
+                render_pass.set_bind_group(0, &camera_bind_group, &[]);
                 render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
                 render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
                 render_pass.draw_indexed(0..indices.len() as u32, 0, 0..1);
