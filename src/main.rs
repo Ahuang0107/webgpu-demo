@@ -1,6 +1,7 @@
 use wgpu::util::DeviceExt;
 
 mod camera;
+mod texture;
 mod vertex;
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -46,6 +47,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .expect("surface isn't supported by the adapter.");
     surface.configure(&device, &config);
 
+    /* -------- 这里处理的是摄像头的位置信息 -------- */
+
     let camera = camera::Camera::new(size.width as f32, size.height as f32);
     let mut camera_uniform = camera::CameraUniform::new();
     camera_uniform.update_view_proj(&camera);
@@ -56,9 +59,16 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         label: None,
     });
 
-    let camera_bind_group_layout =
-        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[wgpu::BindGroupLayoutEntry {
+    /* -------- 这里定义渲染管线 -------- */
+
+    let diffuse_bytes = include_bytes!("example.png");
+    let diffuse_texture = texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "")?;
+
+    /* -------- 这里定义渲染管线 -------- */
+
+    let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::VERTEX,
                 ty: wgpu::BindingType::Buffer {
@@ -67,29 +77,56 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                     min_binding_size: None,
                 },
                 count: None,
-            }],
-            label: None,
-        });
-    let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        layout: &camera_bind_group_layout,
-        entries: &[wgpu::BindGroupEntry {
-            binding: 0,
-            resource: camera_uniform_buffer.as_entire_binding(),
-        }],
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    multisampled: false,
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
         label: None,
     });
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        layout: &bind_group_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: camera_uniform_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
+            },
+        ],
+        label: None,
+    });
+
+    /* -------- 这里定义渲染管线 -------- */
 
     let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[&camera_bind_group_layout],
+        bind_group_layouts: &[&bind_group_layout],
         push_constant_ranges: &[],
     });
-
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: None,
         source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("shader.wgsl"))),
     });
-
     let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: None,
         layout: Some(&render_pipeline_layout),
@@ -112,6 +149,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         multiview: None,
     });
 
+    /* -------- 这里定义渲染管线 -------- */
+
     let p0 = (160.0_f32, 160.0);
     let p1 = (160.0_f32, 480.0);
     let p2 = (480.0_f32, 480.0);
@@ -121,10 +160,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let w_2 = (size.width / 2) as f32;
     let h_2 = (size.height / 2) as f32;
     let center = (w_2, h_2);
-    let p0_v = vertex::Vertex::new((p0.0 - center.0) / w_2, -(p0.1 - center.1) / h_2);
-    let p1_v = vertex::Vertex::new((p1.0 - center.0) / w_2, -(p1.1 - center.1) / h_2);
-    let p2_v = vertex::Vertex::new((p2.0 - center.0) / w_2, -(p2.1 - center.1) / h_2);
-    let p3_v = vertex::Vertex::new((p3.0 - center.0) / w_2, -(p3.1 - center.1) / h_2);
+    let p0_v = vertex::Vertex::new((p0.0 - center.0) / w_2, -(p0.1 - center.1) / h_2, 0.0, 0.0);
+    let p1_v = vertex::Vertex::new((p1.0 - center.0) / w_2, -(p1.1 - center.1) / h_2, 0.0, 1.0);
+    let p2_v = vertex::Vertex::new((p2.0 - center.0) / w_2, -(p2.1 - center.1) / h_2, 1.0, 1.0);
+    let p3_v = vertex::Vertex::new((p3.0 - center.0) / w_2, -(p3.1 - center.1) / h_2, 1.0, 0.0);
 
     let vertices: [vertex::Vertex; 4] = [p0_v, p1_v, p2_v, p3_v];
     log::info!("vertices: {:#?}", vertices);
@@ -171,7 +210,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                     depth_stencil_attachment: None,
                 });
                 render_pass.set_pipeline(&render_pipeline);
-                render_pass.set_bind_group(0, &camera_bind_group, &[]);
+                render_pass.set_bind_group(0, &bind_group, &[]);
                 render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
                 render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
                 render_pass.draw_indexed(0..indices.len() as u32, 0, 0..1);

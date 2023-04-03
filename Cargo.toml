@@ -10,7 +10,10 @@ wgpu = "0.15.0"
 pollster = "0.2"
 env_logger = "0.10"
 log = "0.4"
-bytemuck = { version = "1.12", features = [ "derive" ] }
-glam = "0.23.0"
-ultraviolet = "0.9.1"
+bytemuck = { version = "1.12", features = ["derive"] }
 cgmath = "0.18.0"
+
+[dependencies.image]
+version = "0.24"
+default-features = false
+features = ["png"]
