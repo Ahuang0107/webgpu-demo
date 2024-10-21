@@ -1,3 +1,5 @@
+use vertex::*;
+
 mod camera;
 mod render;
 mod texture;
@@ -15,17 +17,42 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut render = render::Render::new(&window).await?;
 
-    let p0 = (100.0_f32, 100.0);
-    let p1 = (100.0_f32, 800.0);
-    let p2 = (800.0_f32, 800.0);
-    let p3 = (800.0_f32, 100.0);
-    let p = [p0, p1, p2, p3];
+    let texture1 = render.load_texture(include_bytes!("example.png"))?;
+    let texture2 = render.load_texture(include_bytes!("example2.png"))?;
+
+    let data = vec![
+        (
+            [
+                (100.0_f32, 100.0),
+                (100.0_f32, 400.0),
+                (400.0_f32, 400.0),
+                (400.0_f32, 100.0),
+            ],
+            texture1,
+        ),
+        (
+            [
+                (350.0_f32, 100.0),
+                (350.0_f32, 364.0),
+                (614.0_f32, 364.0),
+                (614.0_f32, 100.0),
+            ],
+            texture2,
+        ),
+    ];
 
     log::info!("Entering render loop...");
     event_loop.run(move |event, _, control_flow| match event {
         winit::event::Event::RedrawRequested(_) => {
-            let (vertices, indices) = cal_vertices(p, window.inner_size());
-            render.render(&vertices, &indices);
+            let instances = data
+                .iter()
+                .map(|(points, texture_id)| {
+                    let (vertices, indices) = cal_vertices(points.clone(), window.inner_size());
+                    (vertices, indices, *texture_id)
+                })
+                .collect::<Vec<([Vertex; 4], [u16; 6], u32)>>();
+            render.flash_instances(instances);
+            render.render();
         }
         winit::event::Event::MainEventsCleared => {
             window.request_redraw();
@@ -46,7 +73,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 fn cal_vertices<'a>(
     p: [(f32, f32); 4],
     size: winit::dpi::PhysicalSize<u32>,
-) -> ([vertex::Vertex; 4], &'a [u16]) {
+) -> ([Vertex; 4], [u16; 6]) {
     let p0 = p[0];
     let p1 = p[1];
     let p2 = p[2];
@@ -54,13 +81,13 @@ fn cal_vertices<'a>(
     let w_2 = (size.width / 2) as f32;
     let h_2 = (size.height / 2) as f32;
     let center = (w_2, h_2);
-    let p0_v = vertex::Vertex::new((p0.0 - center.0) / w_2, -(p0.1 - center.1) / h_2, 0.0, 0.0);
-    let p1_v = vertex::Vertex::new((p1.0 - center.0) / w_2, -(p1.1 - center.1) / h_2, 0.0, 1.0);
-    let p2_v = vertex::Vertex::new((p2.0 - center.0) / w_2, -(p2.1 - center.1) / h_2, 1.0, 1.0);
-    let p3_v = vertex::Vertex::new((p3.0 - center.0) / w_2, -(p3.1 - center.1) / h_2, 1.0, 0.0);
+    let p0_v = Vertex::new((p0.0 - center.0) / w_2, -(p0.1 - center.1) / h_2, 0.0, 0.0);
+    let p1_v = Vertex::new((p1.0 - center.0) / w_2, -(p1.1 - center.1) / h_2, 0.0, 1.0);
+    let p2_v = Vertex::new((p2.0 - center.0) / w_2, -(p2.1 - center.1) / h_2, 1.0, 1.0);
+    let p3_v = Vertex::new((p3.0 - center.0) / w_2, -(p3.1 - center.1) / h_2, 1.0, 0.0);
 
-    let vertices: [vertex::Vertex; 4] = [p0_v, p1_v, p2_v, p3_v];
-    let indices: &[u16] = &[0, 1, 2, 0, 2, 3];
+    let vertices: [Vertex; 4] = [p0_v, p1_v, p2_v, p3_v];
+    let indices: [u16; 6] = [0, 1, 2, 0, 2, 3];
 
     (vertices, indices)
 }

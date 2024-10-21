@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
 pub struct Render {
@@ -8,8 +9,9 @@ pub struct Render {
     render_pipeline: wgpu::RenderPipeline,
     camera: crate::camera::Camera,
     camera_bind_group_layout: wgpu::BindGroupLayout,
-    texture: crate::texture::Texture,
     texture_bind_group_layout: wgpu::BindGroupLayout,
+    textures: HashMap<u32, crate::texture::Texture>,
+    instances: Vec<(wgpu::Buffer, wgpu::Buffer, u32)>,
 }
 
 impl Render {
@@ -62,9 +64,6 @@ impl Render {
                 }],
                 label: None,
             });
-        let diffuse_bytes = include_bytes!("example.png");
-        let diffuse_texture =
-            crate::texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "")?;
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
@@ -133,8 +132,9 @@ impl Render {
             render_pipeline,
             camera,
             camera_bind_group_layout,
-            texture: diffuse_texture,
             texture_bind_group_layout,
+            textures: HashMap::new(),
+            instances: Vec::new(),
         })
     }
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -143,11 +143,45 @@ impl Render {
         self.config.height = height;
         self.surface.configure(&self.device, &self.config)
     }
-    pub fn render<T: bytemuck::Zeroable + bytemuck::Pod>(
+    pub fn load_texture(
         &mut self,
-        vertices: &[T],
-        indices: &[u16],
+        texture_bytes: &[u8],
+    ) -> Result<u32, Box<dyn std::error::Error>> {
+        let texture = crate::texture::Texture::from_bytes(
+            &self.device,
+            &self.queue,
+            &self.texture_bind_group_layout,
+            texture_bytes,
+        )?;
+        let next_id = (self.textures.len() + 1) as u32;
+        self.textures.insert(next_id, texture);
+        Ok(next_id)
+    }
+    pub fn flash_instances<T: bytemuck::Zeroable + bytemuck::Pod>(
+        &mut self,
+        instances: Vec<([T; 4], [u16; 6], u32)>,
     ) {
+        self.instances.clear();
+        for (vertices, indices, texture_id) in instances {
+            let vertex_buffer = self
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Vertex Buffer"),
+                    contents: bytemuck::cast_slice(&vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+            let index_buffer = self
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Index Buffer"),
+                    contents: bytemuck::cast_slice(&indices),
+                    usage: wgpu::BufferUsages::INDEX,
+                });
+            self.instances
+                .push((vertex_buffer, index_buffer, texture_id));
+        }
+    }
+    pub fn render(&mut self) {
         let frame = self
             .surface
             .get_current_texture()
@@ -159,20 +193,6 @@ impl Render {
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
-        let vertex_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-        let index_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(indices),
-                usage: wgpu::BufferUsages::INDEX,
-            });
         let camera_uniform_buffer =
             self.device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -186,20 +206,6 @@ impl Render {
                 binding: 0,
                 resource: camera_uniform_buffer.as_entire_binding(),
             }],
-            label: None,
-        });
-        let texture_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &self.texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&self.texture.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&self.texture.sampler),
-                },
-            ],
             label: None,
         });
 
@@ -216,12 +222,17 @@ impl Render {
                 })],
                 depth_stencil_attachment: None,
             });
-            render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &camera_bind_group, &[]);
-            render_pass.set_bind_group(1, &texture_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-            render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..indices.len() as u32, 0, 0..1);
+
+            for (vertex_buffer, index_buffer, texture_id) in self.instances.iter() {
+                if let Some(texture) = self.textures.get(texture_id) {
+                    render_pass.set_pipeline(&self.render_pipeline);
+                    render_pass.set_bind_group(0, &camera_bind_group, &[]);
+                    render_pass.set_bind_group(1, &texture.bind_group, &[]);
+                    render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                    render_pass.draw_indexed(0..6, 0, 0..1);
+                }
+            }
         }
 
         self.queue.submit(Some(encoder.finish()));
