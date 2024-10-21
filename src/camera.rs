@@ -8,7 +8,7 @@ pub struct Camera {
 impl Camera {
     pub fn new(width: u32, height: u32) -> Self {
         Self {
-            eye: (0.0, 1.0, 2.0).into(),
+            eye: (0.0, 0.0, 2.0).into(),
             target: glam::Vec3::ZERO,
             up: glam::Vec3::Y,
             aspect: width as f32 / height as f32,
