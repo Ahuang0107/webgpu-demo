@@ -30,6 +30,7 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return in.color * textureSample(t_diffuse, s_diffuse, in.tex_coords);
+    // 将最终的颜色结果从线性空间转换回 sRGB 空间输出到屏幕
+    return pow(in.color * textureSample(t_diffuse, s_diffuse, in.tex_coords), vec4(1.0 / 2.2));
 }
 
