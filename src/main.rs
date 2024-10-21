@@ -10,7 +10,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let event_loop = winit::event_loop::EventLoop::new();
-    let size = winit::dpi::PhysicalSize::new(1424, 720);
+    let size = winit::dpi::PhysicalSize::new(256 * 6, 256 * 3);
     let window = winit::window::WindowBuilder::new()
         .with_inner_size(size)
         .build(&event_loop)?;
