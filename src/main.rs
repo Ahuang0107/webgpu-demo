@@ -16,9 +16,9 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut render = render::Render::new(&window).await?;
 
     let p0 = (100.0_f32, 100.0);
-    let p1 = (100.0_f32, 400.0);
-    let p2 = (400.0_f32, 400.0);
-    let p3 = (400.0_f32, 100.0);
+    let p1 = (100.0_f32, 800.0);
+    let p2 = (800.0_f32, 800.0);
+    let p3 = (800.0_f32, 100.0);
     let p = [p0, p1, p2, p3];
 
     log::info!("Entering render loop...");
