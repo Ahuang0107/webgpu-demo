@@ -33,21 +33,28 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    // 表示片元基于屏幕的 uv 位置，in.clip_position 是基于屏幕的像素坐标，与 png 坐标类似
     let viewport_uv = vec2<f32>(
-        ((in.clip_position.x / camera.size.x) + 1.0) / 2.0,
-        ((in.clip_position.y / camera.size.y) + 1.0) / 2.0
+        in.clip_position.x / camera.size.x,
+        in.clip_position.y / camera.size.y
     );
-    // TODO 现在的显示结果，已经说明了能够 grab 到屏幕信息了，接下来需要做的就只是找到正确的位置了
-    let grab_color = textureSample(t_grab, s_grab, vec2<f32>(0.2, 0.4));
-    let srgb_grab_color = pow(grab_color, vec4(1.0 / 2.2));
+    let grab_color = textureSample(t_grab, s_grab, viewport_uv);
+    // 从屏幕捕获的 grab texture 已经是 srgb 空间了
+//    let srgb_grab_color = pow(grab_color, vec4(1.0 / 2.2));
     let texture_color = in.color * textureSample(t_diffuse, s_diffuse, in.tex_coords);
     // 将最终的颜色结果从线性空间转换回 sRGB 空间输出到屏幕
     let srgb_texture_color = pow(texture_color, vec4(1.0 / 2.2));
     if camera.size.z == 1.0 {
-        return srgb_grab_color;
+        return vec4<f32>(hard_light(srgb_texture_color.rgb, grab_color.rgb), srgb_texture_color.a);
     } else{
         return srgb_texture_color;
     }
-//    return srgb_grab_color * srgb_texture_color;
 }
 
+fn hard_light(a: vec3<f32>, b: vec3<f32>) -> vec3<f32> {
+    return vec3<f32>(hard_light_channel(a.x, b.x), hard_light_channel(a.y, b.y), hard_light_channel(a.z, b.z));
+}
+
+fn hard_light_channel(a: f32, b: f32) -> f32 {
+    return select(2. * a * b, 1. - 2. * (1. - a) * (1. -b), b < 0.5);
+}
