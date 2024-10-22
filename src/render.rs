@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Debug;
 use wgpu::util::DeviceExt;
 use wgpu::SurfaceConfiguration;
 
@@ -65,7 +66,7 @@ impl Render {
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -172,12 +173,13 @@ impl Render {
         self.textures.insert(next_id, texture);
         Ok(next_id)
     }
-    pub fn flash_instances<T: bytemuck::Zeroable + bytemuck::Pod>(
+    pub fn flash_instances<T: bytemuck::Zeroable + bytemuck::Pod + Debug>(
         &mut self,
         instances: Vec<([T; 4], [u16; 6], u32)>,
     ) {
         self.instances.clear();
         for (vertices, indices, texture_id) in instances {
+            // log::info!("vertices: {vertices:?}");
             let vertex_buffer = self
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -247,6 +249,7 @@ impl Render {
             label: None,
         });
 
+        self.camera.use_grab = false;
         let camera_uniform_buffer =
             self.device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -331,6 +334,23 @@ impl Render {
             grab_texture_desc.size,
         );
         self.queue.submit(Some(encoder.finish()));
+
+        self.camera.use_grab = true;
+        let camera_uniform_buffer =
+            self.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    contents: bytemuck::cast_slice(&[self.camera.build_view_projection_matrix()]),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                    label: None,
+                });
+        let camera_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &self.camera_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: camera_uniform_buffer.as_entire_binding(),
+            }],
+            label: None,
+        });
 
         let mut encoder = self
             .device

@@ -20,22 +20,26 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let texture1 = render.load_texture(include_bytes!("example.png"))?;
     let texture2 = render.load_texture(include_bytes!("example2.png"))?;
 
+    let pos1 = (100.0, 100.0);
+    let size1 = (300.0, 300.0);
+    let pos2 = (350.0, 100.0);
+    let size2 = (264.0, 264.0);
     let data = vec![
         (
             [
-                (100.0_f32, 100.0),
-                (100.0_f32, 400.0),
-                (400.0_f32, 400.0),
-                (400.0_f32, 100.0),
+                pos1,
+                (pos1.0, pos1.1 + size1.1),
+                (pos1.0 + size1.0, pos1.1 + size1.1),
+                (pos1.0 + size1.0, pos1.1),
             ],
             texture1,
         ),
         (
             [
-                (350.0_f32, 100.0),
-                (350.0_f32, 364.0),
-                (614.0_f32, 364.0),
-                (614.0_f32, 100.0),
+                pos2,
+                (pos2.0, pos2.1 + size2.1),
+                (pos2.0 + size2.0, pos2.1 + size2.1),
+                (pos2.0 + size2.0, pos2.1),
             ],
             texture2,
         ),
