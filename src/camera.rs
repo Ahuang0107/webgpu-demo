@@ -18,6 +18,10 @@ impl Camera {
             use_grab: false,
         }
     }
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.width = width;
+        self.height = height;
+    }
     pub fn build_view_projection_matrix(&self) -> CameraUniform {
         let view = glam::Mat4::look_at_rh(self.eye, self.target, self.up);
         let proj =

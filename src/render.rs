@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use wgpu::util::DeviceExt;
-use wgpu::SurfaceConfiguration;
 
 pub struct Render {
     surface: wgpu::Surface,
@@ -12,6 +11,8 @@ pub struct Render {
     camera: crate::camera::Camera,
     camera_bind_group_layout: wgpu::BindGroupLayout,
     texture_bind_group_layout: wgpu::BindGroupLayout,
+    grab_texture: wgpu::Texture,
+    grab_texture_bind_group: wgpu::BindGroup,
     textures: HashMap<u32, crate::texture::Texture>,
     instances: Vec<(wgpu::Buffer, wgpu::Buffer, u32)>,
 }
@@ -47,11 +48,8 @@ impl Render {
             )
             .await?;
 
-        // let config = surface
-        //     .get_default_config(&adapter, size.width, size.height)
-        //     .expect("surface isn't supported by the adapter.");
         let caps = surface.get_capabilities(&adapter);
-        let config = SurfaceConfiguration {
+        let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
             format: *caps.formats.get(0).unwrap(),
             width: size.width,
@@ -98,6 +96,38 @@ impl Render {
                 ],
                 label: None,
             });
+        let grab_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Grab Texture"),
+            size: wgpu::Extent3d {
+                width: size.width,
+                height: size.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Bgra8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let grab_texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(
+                        &grab_texture.create_view(&wgpu::TextureViewDescriptor::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(
+                        &device.create_sampler(&wgpu::SamplerDescriptor::default()),
+                    ),
+                },
+            ],
+            label: None,
+        });
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: None,
@@ -149,6 +179,8 @@ impl Render {
             camera,
             camera_bind_group_layout,
             texture_bind_group_layout,
+            grab_texture,
+            grab_texture_bind_group,
             textures: HashMap::new(),
             instances: Vec::new(),
         })
@@ -157,7 +189,44 @@ impl Render {
         log::info!("resize to ({},{})", width, height);
         self.config.width = width;
         self.config.height = height;
-        self.surface.configure(&self.device, &self.config)
+        self.surface.configure(&self.device, &self.config);
+        self.camera.resize(width, height);
+        let grab_texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Grab Texture"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Bgra8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let grab_texture_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &self.texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(
+                        &grab_texture.create_view(&wgpu::TextureViewDescriptor::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(
+                        &self
+                            .device
+                            .create_sampler(&wgpu::SamplerDescriptor::default()),
+                    ),
+                },
+            ],
+            label: None,
+        });
+        self.grab_texture = grab_texture;
+        self.grab_texture_bind_group = grab_texture_bind_group;
     }
     pub fn load_texture(
         &mut self,
@@ -294,44 +363,14 @@ impl Render {
                 render_pass.draw_indexed(0..6, 0, 0..1);
             }
         }
-        let texture_width = self.config.width;
-        let texture_height = self.config.height;
-        assert_eq!(0, texture_width % 256);
-        assert_eq!(0, texture_height % 256);
-        let grab_texture_desc = wgpu::TextureDescriptor {
-            label: Some("Grab Texture"),
-            size: wgpu::Extent3d {
-                width: texture_width,
-                height: texture_height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Bgra8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        };
-        let grab_texture = self.device.create_texture(&grab_texture_desc);
-        let grab_texture_view = grab_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let grab_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &self.texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&grab_texture_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-            ],
-            label: None,
-        });
         encoder.copy_texture_to_texture(
             frame.texture.as_image_copy(),
-            grab_texture.as_image_copy(),
-            grab_texture_desc.size,
+            self.grab_texture.as_image_copy(),
+            wgpu::Extent3d {
+                width: self.grab_texture.width(),
+                height: self.grab_texture.height(),
+                depth_or_array_layers: 1,
+            },
         );
         self.queue.submit(Some(encoder.finish()));
 
@@ -374,7 +413,7 @@ impl Render {
                 render_pass.set_pipeline(&self.render_pipeline);
                 render_pass.set_bind_group(0, &camera_bind_group, &[]);
                 render_pass.set_bind_group(1, &texture.bind_group, &[]);
-                render_pass.set_bind_group(2, &grab_bind_group, &[]);
+                render_pass.set_bind_group(2, &self.grab_texture_bind_group, &[]);
                 render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
                 render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
                 render_pass.draw_indexed(0..6, 0, 0..1);
