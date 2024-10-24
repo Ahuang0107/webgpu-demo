@@ -35,6 +35,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 (pos1.0 + size1.0, pos1.1 + size1.1),
                 (pos1.0 + size1.0, pos1.1),
             ],
+            0,
             texture1,
         ),
         (
@@ -44,6 +45,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 (pos2.0 + size2.0, pos2.1 + size2.1),
                 (pos2.0 + size2.0, pos2.1),
             ],
+            1,
             texture2,
         ),
         (
@@ -53,23 +55,26 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 (pos3.0 + size3.0, pos3.1 + size3.1),
                 (pos3.0 + size3.0, pos3.1),
             ],
+            1_u32,
             texture3,
         ),
     ];
 
+    let instances = data
+        .iter()
+        .map(|(points, blend_mode, texture_id)| {
+            let (vertices, indices) =
+                cal_vertices(points.clone(), window.inner_size(), *blend_mode);
+            (vertices, indices, *texture_id, *blend_mode)
+        })
+        .collect::<Vec<([Vertex; 4], [u16; 6], u32, u32)>>();
+
+    render.flash_instances(instances);
+    render.render();
+
     log::info!("Entering render loop...");
     event_loop.run(move |event, _, control_flow| match event {
-        winit::event::Event::RedrawRequested(_) => {
-            let instances = data
-                .iter()
-                .map(|(points, texture_id)| {
-                    let (vertices, indices) = cal_vertices(points.clone(), window.inner_size());
-                    (vertices, indices, *texture_id)
-                })
-                .collect::<Vec<([Vertex; 4], [u16; 6], u32)>>();
-            render.flash_instances(instances);
-            render.render();
-        }
+        winit::event::Event::RedrawRequested(_) => {}
         winit::event::Event::MainEventsCleared => {
             window.request_redraw();
         }
@@ -89,6 +94,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 fn cal_vertices<'a>(
     p: [(f32, f32); 4],
     size: winit::dpi::PhysicalSize<u32>,
+    blend_mode: u32,
 ) -> ([Vertex; 4], [u16; 6]) {
     let p0 = p[0];
     let p1 = p[1];
@@ -97,10 +103,34 @@ fn cal_vertices<'a>(
     let w_2 = (size.width / 2) as f32;
     let h_2 = (size.height / 2) as f32;
     let center = (w_2, h_2);
-    let p0_v = Vertex::new((p0.0 - center.0) / w_2, -(p0.1 - center.1) / h_2, 0.0, 0.0);
-    let p1_v = Vertex::new((p1.0 - center.0) / w_2, -(p1.1 - center.1) / h_2, 0.0, 1.0);
-    let p2_v = Vertex::new((p2.0 - center.0) / w_2, -(p2.1 - center.1) / h_2, 1.0, 1.0);
-    let p3_v = Vertex::new((p3.0 - center.0) / w_2, -(p3.1 - center.1) / h_2, 1.0, 0.0);
+    let p0_v = Vertex::new(
+        (p0.0 - center.0) / w_2,
+        -(p0.1 - center.1) / h_2,
+        0.0,
+        0.0,
+        blend_mode,
+    );
+    let p1_v = Vertex::new(
+        (p1.0 - center.0) / w_2,
+        -(p1.1 - center.1) / h_2,
+        0.0,
+        1.0,
+        blend_mode,
+    );
+    let p2_v = Vertex::new(
+        (p2.0 - center.0) / w_2,
+        -(p2.1 - center.1) / h_2,
+        1.0,
+        1.0,
+        blend_mode,
+    );
+    let p3_v = Vertex::new(
+        (p3.0 - center.0) / w_2,
+        -(p3.1 - center.1) / h_2,
+        1.0,
+        0.0,
+        blend_mode,
+    );
 
     let vertices: [Vertex; 4] = [p0_v, p1_v, p2_v, p3_v];
     let indices: [u16; 6] = [0, 1, 2, 0, 2, 3];

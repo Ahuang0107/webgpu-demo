@@ -13,8 +13,9 @@ pub struct Render {
     texture_bind_group_layout: wgpu::BindGroupLayout,
     grab_texture: wgpu::Texture,
     grab_texture_bind_group: wgpu::BindGroup,
+    empty_texture_bind_group: wgpu::BindGroup,
     textures: HashMap<u32, crate::texture::Texture>,
-    instances: Vec<(wgpu::Buffer, wgpu::Buffer, u32)>,
+    instances: Vec<(wgpu::Buffer, wgpu::Buffer, u32, u32)>,
 }
 
 impl Render {
@@ -128,6 +129,39 @@ impl Render {
             ],
             label: None,
         });
+
+        let empty_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Empty Texture"),
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let empty_texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(
+                        &empty_texture.create_view(&wgpu::TextureViewDescriptor::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(
+                        &device.create_sampler(&wgpu::SamplerDescriptor::default()),
+                    ),
+                },
+            ],
+            label: None,
+        });
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: None,
@@ -181,6 +215,7 @@ impl Render {
             texture_bind_group_layout,
             grab_texture,
             grab_texture_bind_group,
+            empty_texture_bind_group,
             textures: HashMap::new(),
             instances: Vec::new(),
         })
@@ -244,10 +279,10 @@ impl Render {
     }
     pub fn flash_instances<T: bytemuck::Zeroable + bytemuck::Pod + Debug>(
         &mut self,
-        instances: Vec<([T; 4], [u16; 6], u32)>,
+        instances: Vec<([T; 4], [u16; 6], u32, u32)>,
     ) {
         self.instances.clear();
-        for (vertices, indices, texture_id) in instances {
+        for (vertices, indices, texture_id, blend_mode) in instances {
             // log::info!("vertices: {vertices:?}");
             let vertex_buffer = self
                 .device
@@ -264,7 +299,7 @@ impl Render {
                     usage: wgpu::BufferUsages::INDEX,
                 });
             self.instances
-                .push((vertex_buffer, index_buffer, texture_id));
+                .push((vertex_buffer, index_buffer, texture_id, blend_mode));
         }
     }
     pub fn render(&mut self) {
@@ -276,49 +311,6 @@ impl Render {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
-
-        let empty_grab_texture_desc = wgpu::TextureDescriptor {
-            label: Some("Empty Texture"),
-            size: wgpu::Extent3d {
-                width: 1,
-                height: 1,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        };
-        let empty_grab_texture = self.device.create_texture(&empty_grab_texture_desc);
-        let empty_grab_view =
-            empty_grab_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let empty_grab_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &self.texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&empty_grab_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-            ],
-            label: None,
-        });
-
-        self.camera.use_grab = false;
         let camera_uniform_buffer =
             self.device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -339,122 +331,51 @@ impl Render {
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: None,
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &frame_view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: None,
-            });
-
-            let (vertex_buffer, index_buffer, texture_id) = &self.instances[0];
-            if let Some(texture) = self.textures.get(texture_id) {
-                render_pass.set_pipeline(&self.render_pipeline);
-                render_pass.set_bind_group(0, &camera_bind_group, &[]);
-                render_pass.set_bind_group(1, &texture.bind_group, &[]);
-                render_pass.set_bind_group(2, &empty_grab_bind_group, &[]);
-                render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-                render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-                render_pass.draw_indexed(0..6, 0, 0..1);
-            }
-        }
-        encoder.copy_texture_to_texture(
-            frame.texture.as_image_copy(),
-            self.grab_texture.as_image_copy(),
-            wgpu::Extent3d {
-                width: self.grab_texture.width(),
-                height: self.grab_texture.height(),
-                depth_or_array_layers: 1,
-            },
-        );
-        self.queue.submit(Some(encoder.finish()));
-
-        self.camera.use_grab = true;
-        let camera_uniform_buffer =
-            self.device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    contents: bytemuck::cast_slice(&[self.camera.build_view_projection_matrix()]),
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            for (index, (vertex_buffer, index_buffer, texture_id, blend_mode)) in
+                self.instances.iter().enumerate()
+            {
+                if *blend_mode != 0 {
+                    encoder.copy_texture_to_texture(
+                        frame.texture.as_image_copy(),
+                        self.grab_texture.as_image_copy(),
+                        wgpu::Extent3d {
+                            width: self.grab_texture.width(),
+                            height: self.grab_texture.height(),
+                            depth_or_array_layers: 1,
+                        },
+                    );
+                }
+                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: None,
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &frame_view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: if index == 0 {
+                                wgpu::LoadOp::Clear(wgpu::Color::WHITE)
+                            } else {
+                                wgpu::LoadOp::Load
+                            },
+                            store: true,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
                 });
-        let camera_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &self.camera_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: camera_uniform_buffer.as_entire_binding(),
-            }],
-            label: None,
-        });
-
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: None,
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &frame_view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: None,
-            });
-
-            let (vertex_buffer, index_buffer, texture_id) = &self.instances[1];
-            if let Some(texture) = self.textures.get(texture_id) {
-                render_pass.set_pipeline(&self.render_pipeline);
-                render_pass.set_bind_group(0, &camera_bind_group, &[]);
-                render_pass.set_bind_group(1, &texture.bind_group, &[]);
-                render_pass.set_bind_group(2, &self.grab_texture_bind_group, &[]);
-                render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-                render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-                render_pass.draw_indexed(0..6, 0, 0..1);
+                if let Some(texture) = self.textures.get(texture_id) {
+                    render_pass.set_pipeline(&self.render_pipeline);
+                    render_pass.set_bind_group(0, &camera_bind_group, &[]);
+                    render_pass.set_bind_group(1, &texture.bind_group, &[]);
+                    if *blend_mode != 0 {
+                        render_pass.set_bind_group(2, &self.grab_texture_bind_group, &[]);
+                    } else {
+                        render_pass.set_bind_group(2, &self.empty_texture_bind_group, &[]);
+                    }
+                    render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                    render_pass.draw_indexed(0..6, 0, 0..1);
+                }
             }
         }
-        encoder.copy_texture_to_texture(
-            frame.texture.as_image_copy(),
-            self.grab_texture.as_image_copy(),
-            wgpu::Extent3d {
-                width: self.grab_texture.width(),
-                height: self.grab_texture.height(),
-                depth_or_array_layers: 1,
-            },
-        );
-
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: None,
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &frame_view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: None,
-            });
-
-            let (vertex_buffer, index_buffer, texture_id) = &self.instances[2];
-            if let Some(texture) = self.textures.get(texture_id) {
-                render_pass.set_pipeline(&self.render_pipeline);
-                render_pass.set_bind_group(0, &camera_bind_group, &[]);
-                render_pass.set_bind_group(1, &texture.bind_group, &[]);
-                render_pass.set_bind_group(2, &self.grab_texture_bind_group, &[]);
-                render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-                render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-                render_pass.draw_indexed(0..6, 0, 0..1);
-            }
-        }
-
         self.queue.submit(Some(encoder.finish()));
 
         frame.present();

@@ -4,7 +4,6 @@ pub struct Camera {
     up: glam::Vec3,
     width: u32,
     height: u32,
-    pub use_grab: bool,
 }
 
 impl Camera {
@@ -15,7 +14,6 @@ impl Camera {
             up: glam::Vec3::Y,
             width,
             height,
-            use_grab: false,
         }
     }
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -27,7 +25,7 @@ impl Camera {
         let proj =
             glam::Mat4::perspective_rh(45.0, self.width as f32 / self.height as f32, 0.1, 100.0);
 
-        return CameraUniform::new(proj * view, self.width, self.height, self.use_grab);
+        return CameraUniform::new(proj * view, self.width, self.height);
     }
 }
 
@@ -39,15 +37,10 @@ pub struct CameraUniform {
 }
 
 impl CameraUniform {
-    pub fn new(v: glam::Mat4, width: u32, height: u32, use_grab: bool) -> Self {
+    pub fn new(v: glam::Mat4, width: u32, height: u32) -> Self {
         Self {
             view_proj: v.to_cols_array_2d(),
-            size: [
-                width as f32,
-                height as f32,
-                if use_grab { 1.0 } else { 0.0 },
-                0.0,
-            ],
+            size: [width as f32, height as f32, 0.0, 0.0],
         }
     }
 }

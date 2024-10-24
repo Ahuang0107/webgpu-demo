@@ -12,12 +12,14 @@ struct VertexInput {
     @location(0) position: vec2<f32>,
     @location(1) color: vec3<f32>,
     @location(2) tex_coords: vec2<f32>,
+    @location(3) blend_mode: u32,
 };
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) color: vec4<f32>,
     @location(1) tex_coords: vec2<f32>,
+    @location(2) blend_mode: u32,
 };
 
 @vertex
@@ -28,6 +30,7 @@ fn vs_main(
         out.color = vec4<f32>(model.color, 1.0);
         out.tex_coords = model.tex_coords;
         out.clip_position = vec4<f32>(model.position.xy, 0.0, 1.0);
+        out.blend_mode = model.blend_mode;
     return out;
 }
 
@@ -44,17 +47,25 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let texture_color = in.color * textureSample(t_diffuse, s_diffuse, in.tex_coords);
     // 将最终的颜色结果从线性空间转换回 sRGB 空间输出到屏幕
     let srgb_texture_color = pow(texture_color, vec4(1.0 / 2.2));
-    if camera.size.z == 1.0 {
-        return vec4<f32>(hard_light(srgb_texture_color.rgb, grab_color.rgb), srgb_texture_color.a);
+    if in.blend_mode == 1u {
+        return vec4<f32>(soft_light(srgb_texture_color.rgb, grab_color.rgb), srgb_texture_color.a);
     } else{
         return srgb_texture_color;
     }
 }
 
-fn hard_light(a: vec3<f32>, b: vec3<f32>) -> vec3<f32> {
-    return vec3<f32>(hard_light_channel(a.x, b.x), hard_light_channel(a.y, b.y), hard_light_channel(a.z, b.z));
+fn multiply(a: vec3<f32>, b: vec3<f32>) -> vec3<f32> {
+    return vec3<f32>(a.r * b.r, a.g * b.g, a.b * b.b);
 }
 
-fn hard_light_channel(a: f32, b: f32) -> f32 {
-    return select(2. * a * b, 1. - 2. * (1. - a) * (1. -b), b < 0.5);
+fn overlay(a: vec3<f32>, b: vec3<f32>) -> vec3<f32> {
+    return select(1.0 - 2.0 * (1.0 - a) * (1.0 -b), 2.0 * a * b, a > vec3<f32>(0.5, 0.5, 0.5));
+}
+
+fn soft_light(a: vec3<f32>, b: vec3<f32>) -> vec3<f32> {
+    return (1.0 - a) * a * b + a * (1.0 - (1.0 -a) * (1.0 - b));
+}
+
+fn hard_light(a: vec3<f32>, b: vec3<f32>) -> vec3<f32> {
+    return select(1.0 - (1.0 - a) * (1.0 - 2.0 * (b - 0.5)), a * (2.0 * b), b > vec3<f32>(0.5, 0.5, 0.5));
 }
