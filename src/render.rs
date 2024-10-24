@@ -334,16 +334,24 @@ impl Render {
             for (index, (vertex_buffer, index_buffer, texture_id, blend_mode)) in
                 self.instances.iter().enumerate()
             {
-                if *blend_mode != 0 {
-                    encoder.copy_texture_to_texture(
-                        frame.texture.as_image_copy(),
-                        self.grab_texture.as_image_copy(),
-                        wgpu::Extent3d {
-                            width: self.grab_texture.width(),
-                            height: self.grab_texture.height(),
-                            depth_or_array_layers: 1,
-                        },
-                    );
+                {
+                    // TODO find the problem, in bevy all the command submit after RenderGraphRunner run all graphs
+                    //  I can not do the copy staff during in any RenderPhases
+                    // let mut encoder = self
+                    //     .device
+                    //     .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+                    if *blend_mode != 0 {
+                        encoder.copy_texture_to_texture(
+                            frame.texture.as_image_copy(),
+                            self.grab_texture.as_image_copy(),
+                            wgpu::Extent3d {
+                                width: self.grab_texture.width(),
+                                height: self.grab_texture.height(),
+                                depth_or_array_layers: 1,
+                            },
+                        );
+                    }
+                    // self.queue.submit(Some(encoder.finish()));
                 }
                 let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: None,
