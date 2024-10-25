@@ -1,6 +1,15 @@
+use crate::blend_mode::BlendMode;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use wgpu::util::DeviceExt;
+
+#[allow(dead_code)]
+const GREY: wgpu::Color = wgpu::Color {
+    r: 138.0 / 255.0,
+    g: 142.0 / 255.0,
+    b: 152.0 / 255.0,
+    a: 1.0,
+};
 
 pub struct Render {
     surface: wgpu::Surface,
@@ -15,7 +24,7 @@ pub struct Render {
     grab_texture_bind_group: wgpu::BindGroup,
     empty_texture_bind_group: wgpu::BindGroup,
     textures: HashMap<u32, crate::texture::Texture>,
-    instances: Vec<(wgpu::Buffer, wgpu::Buffer, u32, u32)>,
+    instances: Vec<(wgpu::Buffer, wgpu::Buffer, u32, BlendMode)>,
 }
 
 impl Render {
@@ -280,7 +289,7 @@ impl Render {
     }
     pub fn flash_instances<T: bytemuck::Zeroable + bytemuck::Pod + Debug>(
         &mut self,
-        instances: Vec<([T; 4], [u16; 6], u32, u32)>,
+        instances: Vec<([T; 4], [u16; 6], u32, BlendMode)>,
     ) {
         self.instances.clear();
         for (vertices, indices, texture_id, blend_mode) in instances {
@@ -330,7 +339,7 @@ impl Render {
 
         let mut encoder = self
             .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         {
             for (index, (vertex_buffer, index_buffer, texture_id, blend_mode)) in
                 self.instances.iter().enumerate()
@@ -341,7 +350,7 @@ impl Render {
                     // let mut encoder = self
                     //     .device
                     //     .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-                    if *blend_mode != 0 {
+                    if *blend_mode != BlendMode::Normal {
                         encoder.copy_texture_to_texture(
                             frame.texture.as_image_copy(),
                             self.grab_texture.as_image_copy(),
@@ -374,7 +383,7 @@ impl Render {
                     render_pass.set_pipeline(&self.render_pipeline);
                     render_pass.set_bind_group(0, &camera_bind_group, &[]);
                     render_pass.set_bind_group(1, &texture.bind_group, &[]);
-                    if *blend_mode != 0 {
+                    if *blend_mode != BlendMode::Normal {
                         render_pass.set_bind_group(2, &self.grab_texture_bind_group, &[]);
                     } else {
                         render_pass.set_bind_group(2, &self.empty_texture_bind_group, &[]);

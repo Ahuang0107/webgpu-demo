@@ -1,5 +1,7 @@
+use blend_mode::*;
 use vertex::*;
 
+mod blend_mode;
 mod camera;
 mod render;
 mod texture;
@@ -35,7 +37,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 (pos1.0 + size1.0, pos1.1 + size1.1),
                 (pos1.0 + size1.0, pos1.1),
             ],
-            0,
+            BlendMode::Normal,
             texture1,
         ),
         (
@@ -45,7 +47,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 (pos2.0 + size2.0, pos2.1 + size2.1),
                 (pos2.0 + size2.0, pos2.1),
             ],
-            1,
+            BlendMode::HardLight,
             texture2,
         ),
         (
@@ -55,7 +57,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 (pos3.0 + size3.0, pos3.1 + size3.1),
                 (pos3.0 + size3.0, pos3.1),
             ],
-            1_u32,
+            BlendMode::HardLight,
             texture3,
         ),
     ];
@@ -67,7 +69,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 cal_vertices(points.clone(), window.inner_size(), *blend_mode);
             (vertices, indices, *texture_id, *blend_mode)
         })
-        .collect::<Vec<([Vertex; 4], [u16; 6], u32, u32)>>();
+        .collect::<Vec<([Vertex; 4], [u16; 6], u32, BlendMode)>>();
 
     render.flash_instances(instances);
     render.render();
@@ -94,7 +96,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 fn cal_vertices<'a>(
     p: [(f32, f32); 4],
     size: winit::dpi::PhysicalSize<u32>,
-    blend_mode: u32,
+    blend_mode: BlendMode,
 ) -> ([Vertex; 4], [u16; 6]) {
     let p0 = p[0];
     let p1 = p[1];
