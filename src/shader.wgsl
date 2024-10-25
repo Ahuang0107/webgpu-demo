@@ -42,26 +42,31 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         in.clip_position.y / camera.size.y
     );
     let grab_color = textureSample(t_grab, s_grab, viewport_uv);
+    let linear_grab_color = pow(grab_color, vec4(1.0 / 2.2));
     let texture_color = in.color * textureSample(t_diffuse, s_diffuse, in.tex_coords);
+    let linear_texture_color = pow(texture_color, vec4(1.0 / 2.2));
+    var out: vec4<f32>;
     if in.blend_mode == 0u {
-        return texture_color;
+        out = linear_texture_color;
     } else{
-        return vec4<f32>(soft_light(texture_color.rgb, grab_color.rgb), texture_color.a);
+        out = vec4<f32>(hard_light(linear_texture_color.rgb, linear_grab_color.rgb), linear_texture_color.a);
     }
+    out = pow(out, vec4(2.2));
+    return out;
 }
 
-fn multiply(a: vec3<f32>, b: vec3<f32>) -> vec3<f32> {
-    return vec3<f32>(a.r * b.r, a.g * b.g, a.b * b.b);
+fn multiply(base: vec3<f32>, top: vec3<f32>) -> vec3<f32> {
+    return vec3<f32>(base.r * top.r, base.g * top.g, base.b * top.b);
 }
 
-fn overlay(a: vec3<f32>, b: vec3<f32>) -> vec3<f32> {
-    return select(1.0 - 2.0 * (1.0 - a) * (1.0 -b), 2.0 * a * b, a > vec3<f32>(0.5, 0.5, 0.5));
+fn overlay(base: vec3<f32>, top: vec3<f32>) -> vec3<f32> {
+    return select(1.0 - 2.0 * (1.0 - base) * (1.0 -top), 2.0 * base * top, base > vec3<f32>(0.5, 0.5, 0.5));
 }
 
-fn soft_light(a: vec3<f32>, b: vec3<f32>) -> vec3<f32> {
-    return (1.0 - a) * a * b + a * (1.0 - (1.0 -a) * (1.0 - b));
+fn soft_light(base: vec3<f32>, top: vec3<f32>) -> vec3<f32> {
+    return (1.0 - base) * base * top + base * (1.0 - (1.0 - base) * (1.0 - top));
 }
 
-fn hard_light(a: vec3<f32>, b: vec3<f32>) -> vec3<f32> {
-    return select(1.0 - (1.0 - a) * (1.0 - 2.0 * (b - 0.5)), a * (2.0 * b), b > vec3<f32>(0.5, 0.5, 0.5));
+fn hard_light(base: vec3<f32>, top: vec3<f32>) -> vec3<f32> {
+    return select(1.0 - 2.0 * (1.0 - base) * (1.0 - top), 2.0 * base * top, top > vec3<f32>(0.5, 0.5, 0.5));
 }
