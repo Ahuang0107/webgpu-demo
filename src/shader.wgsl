@@ -42,15 +42,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         in.clip_position.y / camera.size.y
     );
     let grab_color = textureSample(t_grab, s_grab, viewport_uv);
-    // 从屏幕捕获的 grab texture 已经是 srgb 空间了
-//    let srgb_grab_color = pow(grab_color, vec4(1.0 / 2.2));
     let texture_color = in.color * textureSample(t_diffuse, s_diffuse, in.tex_coords);
-    // 将最终的颜色结果从线性空间转换回 sRGB 空间输出到屏幕
-    let srgb_texture_color = pow(texture_color, vec4(1.0 / 2.2));
     if in.blend_mode == 0u {
-        return srgb_texture_color;
+        return texture_color;
     } else{
-        return vec4<f32>(soft_light(srgb_texture_color.rgb, grab_color.rgb), srgb_texture_color.a);
+        return vec4<f32>(soft_light(texture_color.rgb, grab_color.rgb), texture_color.a);
     }
 }
 
