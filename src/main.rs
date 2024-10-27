@@ -47,7 +47,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 (pos2.0 + size2.0, pos2.1 + size2.1),
                 (pos2.0 + size2.0, pos2.1),
             ],
-            BlendMode::HardLight,
+            BlendMode::SoftLight,
             texture2,
         ),
         (
@@ -57,7 +57,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 (pos3.0 + size3.0, pos3.1 + size3.1),
                 (pos3.0 + size3.0, pos3.1),
             ],
-            BlendMode::HardLight,
+            BlendMode::SoftLight,
             texture3,
         ),
     ];

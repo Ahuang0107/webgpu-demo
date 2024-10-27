@@ -370,7 +370,7 @@ impl Render {
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: if index == 0 {
-                                wgpu::LoadOp::Clear(wgpu::Color::WHITE)
+                                wgpu::LoadOp::Clear(wgpu::Color::BLACK)
                             } else {
                                 wgpu::LoadOp::Load
                             },

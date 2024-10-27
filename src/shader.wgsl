@@ -43,75 +43,52 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     );
     var grab_color = textureSample(t_grab, s_grab, viewport_uv);
     // NOTE 显示设备通常使用 sRGB 空间（gamma space），导入的 texture 也设定的是 rRGB，进行混合处理时需要再线性空间（linear space）下操作
+    //  https://zhuanlan.zhihu.com/p/66558476
     grab_color = pow(grab_color, vec4(1.0 / 2.2));
     var texture_color = in.color * textureSample(t_diffuse, s_diffuse, in.tex_coords);
     texture_color = pow(texture_color, vec4(1.0 / 2.2));
     var out: vec4<f32> = texture_color;
     if in.blend_mode == 11u {
-        out = blend_mode(out, multiply(texture_color.rgb, grab_color.rgb));
+        let result_rgb = multiply(grab_color.rgb, texture_color.rgb);
+        out.r = result_rgb.r * out.a;
+        out.g = result_rgb.g * out.a;
+        out.b = result_rgb.b * out.a;
     }
     if in.blend_mode == 30u {
-        out = blend_mode(out, overlay(texture_color.rgb, grab_color.rgb));
+        let result_rgb = overlay(grab_color.rgb, texture_color.rgb);
+        out.r = result_rgb.r * out.a;
+        out.g = result_rgb.g * out.a;
+        out.b = result_rgb.b * out.a;
     }
     if in.blend_mode == 31u {
-        out = blend_mode(out, soft_light(texture_color.rgb, grab_color.rgb));
+        let result_rgb = soft_light(grab_color.rgb, texture_color.rgb);
+        out.r = result_rgb.r * out.a;
+        out.g = result_rgb.g * out.a;
+        out.b = result_rgb.b * out.a;
     }
     if in.blend_mode == 32u {
-        out = blend_mode(out, hard_light(texture_color.rgb, grab_color.rgb));
+        let result_rgb = hard_light(grab_color.rgb, texture_color.rgb);
+        out.r = result_rgb.r * out.a;
+        out.g = result_rgb.g * out.a;
+        out.b = result_rgb.b * out.a;
     }
     out = pow(out, vec4(2.2));
     return out;
-}
-
-fn blend_mode(src: vec4<f32>, dst: vec3<f32>) -> vec4<f32> {
-    var dst_2 = dst;
-    dst_2.r *= src.a; dst_2.g *= src.a; dst_2.b *= src.a;
-    return vec4(dst_2, src.a);
 }
 
 fn multiply(base: vec3<f32>, top: vec3<f32>) -> vec3<f32> {
     return vec3<f32>(base.r * top.r, base.g * top.g, base.b * top.b);
 }
 
-fn overlay(src: vec3<f32>, dst: vec3<f32>) -> vec3<f32> {
-    return select(1.0 - 2.0 * (1.0 - src) * (1.0 - dst), 2.0 * src * dst, src > vec3<f32>(0.5, 0.5, 0.5));
+fn overlay(base: vec3<f32>, top: vec3<f32>) -> vec3<f32> {
+    // NOTE select(f,t,cond)
+    return select(2.0 * base * top, 1.0 - 2.0 * (1.0 - base) * (1.0 - top), base > vec3<f32>(0.5, 0.5, 0.5));
 }
 
-fn soft_light(src: vec3<f32>, dst: vec3<f32>) -> vec3<f32> {
-    return (1.0 - src) * src * dst + src * (1.0 - (1.0 - src) * (1.0 - dst));
+fn soft_light(base: vec3<f32>, top: vec3<f32>) -> vec3<f32> {
+    return (1.0 - base) * base * top + base * (1.0 - (1.0 - base) * (1.0 - top));
 }
 
-fn hard_light(src: vec3<f32>, dst: vec3<f32>) -> vec3<f32> {
-    return select(1.0 - 2.0 * (1.0 - src) * (1.0 - dst), 2.0 * src * dst, dst > vec3(0.5));
+fn hard_light(base: vec3<f32>, top: vec3<f32>) -> vec3<f32> {
+    return select(2.0 * base * top, 1.0 - 2.0 * (1.0 - base) * (1.0 - top), top > vec3(0.5));
 }
-
-//fn soft_light_ps(src: vec3<f32>, dst: vec3<f32>) -> vec3<f32> {
-//    return select(
-//        2.0 * src * dst + pow(src, vec3(2.0)) * (1.0 - 2.0 * dst), 
-//        2.0 * src * (1.0 - dst) + sqrt(src) * (2.0 * dst - 1.0), 
-//        dst < vec3(0.5)
-//    );
-//}
-//
-//fn soft_light_pegtop(src: vec3<f32>, dst: vec3<f32>) -> vec3<f32> {
-//    return (1.0 - 2.0 * dst) * pow(src, vec3(2.0)) + 2.0 * src * dst;
-//}
-//
-//fn soft_light_illusions_hu(src: vec3<f32>, dst: vec3<f32>) -> vec3<f32> {
-//    let index = pow(vec3(2.0), 2.0 * (vec3(0.5) - dst));
-//    return pow(src, vec3(index));
-//}
-//
-//fn soft_light_w3c(src: vec3<f32>, dst: vec3<f32>) -> vec3<f32> {
-//    return select(
-//        src - (1.0 - 2.0 * dst) * src * (1.0 - src), 
-//        src + (2.0 * dst - 1.0) * (
-//            select(
-//                ((16.0 * src - 12.0) * src + 4.0) * src, 
-//                sqrt(src), 
-//                src <= vec3(0.25)
-//            ) - src
-//        ), 
-//        dst <= vec3(0.5)
-//    );
-//}
