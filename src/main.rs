@@ -1,9 +1,11 @@
+use crate::sprite::Sprite;
 use blend_mode::*;
 use vertex::*;
 
 mod blend_mode;
 mod camera;
 mod render;
+mod sprite;
 mod texture;
 mod vertex;
 
@@ -67,9 +69,15 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .map(|(points, blend_mode, texture_id)| {
             let (vertices, indices) =
                 cal_vertices(points.clone(), window.inner_size(), *blend_mode);
-            (vertices, indices, *texture_id, *blend_mode)
+            Sprite {
+                vertices,
+                indices,
+                texture_id: *texture_id,
+                blend_mode: *blend_mode,
+                if_mask: false,
+            }
         })
-        .collect::<Vec<([Vertex; 4], [u16; 6], u32, BlendMode)>>();
+        .collect::<Vec<Sprite>>();
 
     render.flash_instances(instances);
     render.render();

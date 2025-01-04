@@ -1,6 +1,6 @@
 use crate::blend_mode::BlendMode;
+use crate::sprite::{RawSprite, Sprite};
 use std::collections::HashMap;
-use std::fmt::Debug;
 use wgpu::util::DeviceExt;
 
 #[allow(dead_code)]
@@ -24,7 +24,7 @@ pub struct Render {
     grab_texture_bind_group: wgpu::BindGroup,
     empty_texture_bind_group: wgpu::BindGroup,
     textures: HashMap<u32, crate::texture::Texture>,
-    instances: Vec<(wgpu::Buffer, wgpu::Buffer, u32, BlendMode)>,
+    instances: Vec<RawSprite>,
 }
 
 impl Render {
@@ -287,29 +287,31 @@ impl Render {
         self.textures.insert(next_id, texture);
         Ok(next_id)
     }
-    pub fn flash_instances<T: bytemuck::Zeroable + bytemuck::Pod + Debug>(
-        &mut self,
-        instances: Vec<([T; 4], [u16; 6], u32, BlendMode)>,
-    ) {
+    pub fn flash_instances(&mut self, instances: Vec<Sprite>) {
         self.instances.clear();
-        for (vertices, indices, texture_id, blend_mode) in instances {
+        for sprite in instances {
             // log::info!("vertices: {vertices:?}");
             let vertex_buffer = self
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("Vertex Buffer"),
-                    contents: bytemuck::cast_slice(&vertices),
+                    contents: bytemuck::cast_slice(&sprite.vertices),
                     usage: wgpu::BufferUsages::VERTEX,
                 });
             let index_buffer = self
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("Index Buffer"),
-                    contents: bytemuck::cast_slice(&indices),
+                    contents: bytemuck::cast_slice(&sprite.indices),
                     usage: wgpu::BufferUsages::INDEX,
                 });
-            self.instances
-                .push((vertex_buffer, index_buffer, texture_id, blend_mode));
+            self.instances.push(RawSprite {
+                vertex_buffer,
+                index_buffer,
+                texture_id: sprite.texture_id,
+                blend_mode: sprite.blend_mode,
+                if_mask: sprite.if_mask,
+            });
         }
     }
     pub fn render(&mut self) {
@@ -341,16 +343,14 @@ impl Render {
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         {
-            for (index, (vertex_buffer, index_buffer, texture_id, blend_mode)) in
-                self.instances.iter().enumerate()
-            {
+            for (index, raw_sprite) in self.instances.iter().enumerate() {
                 {
                     // TODO find the problem, in bevy all the command submit after RenderGraphRunner run all graphs
                     //  I can not do the copy staff during in any RenderPhases
                     // let mut encoder = self
                     //     .device
                     //     .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-                    if *blend_mode != BlendMode::Normal {
+                    if raw_sprite.blend_mode != BlendMode::Normal {
                         encoder.copy_texture_to_texture(
                             frame.texture.as_image_copy(),
                             self.grab_texture.as_image_copy(),
@@ -370,7 +370,7 @@ impl Render {
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: if index == 0 {
-                                wgpu::LoadOp::Clear(wgpu::Color::BLACK)
+                                wgpu::LoadOp::Clear(GREY)
                             } else {
                                 wgpu::LoadOp::Load
                             },
@@ -379,17 +379,20 @@ impl Render {
                     })],
                     depth_stencil_attachment: None,
                 });
-                if let Some(texture) = self.textures.get(texture_id) {
+                if let Some(texture) = self.textures.get(&raw_sprite.texture_id) {
                     render_pass.set_pipeline(&self.render_pipeline);
                     render_pass.set_bind_group(0, &camera_bind_group, &[]);
                     render_pass.set_bind_group(1, &texture.bind_group, &[]);
-                    if *blend_mode != BlendMode::Normal {
+                    if raw_sprite.blend_mode != BlendMode::Normal {
                         render_pass.set_bind_group(2, &self.grab_texture_bind_group, &[]);
                     } else {
                         render_pass.set_bind_group(2, &self.empty_texture_bind_group, &[]);
                     }
-                    render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-                    render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                    render_pass.set_vertex_buffer(0, raw_sprite.vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(
+                        raw_sprite.index_buffer.slice(..),
+                        wgpu::IndexFormat::Uint16,
+                    );
                     render_pass.draw_indexed(0..6, 0, 0..1);
                 }
             }
