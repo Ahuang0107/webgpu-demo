@@ -123,9 +123,7 @@ impl Render {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: MASK_FORMAT,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::COPY_SRC,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         });
 
