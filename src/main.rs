@@ -1,5 +1,6 @@
 use crate::sprite::Sprite;
 use blend_mode::*;
+use std::sync::Arc;
 use winit::event::StartCause;
 use winit::event_loop::EventLoop;
 
@@ -19,8 +20,9 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let window = winit::window::WindowBuilder::new()
         .with_inner_size(size)
         .build(&event_loop)?;
+    let window = Arc::new(window);
 
-    let mut render = render::Render::new(&window).await?;
+    let mut render = render::Render::new(window.clone()).await?;
 
     let texture1 = render.load_texture(include_bytes!("example.png"))?;
     let texture2 = render.load_texture(include_bytes!("example2.png"))?;

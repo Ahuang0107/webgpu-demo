@@ -1,7 +1,9 @@
 use crate::blend_mode::BlendMode;
 use crate::sprite::{RawSprite, Sprite};
 use std::collections::HashMap;
+use std::sync::Arc;
 use wgpu::util::DeviceExt;
+use wgpu::{Gles3MinorVersion, InstanceFlags, MemoryHints, PipelineCompilationOptions};
 
 #[allow(dead_code)]
 const GREY: wgpu::Color = wgpu::Color {
@@ -14,7 +16,7 @@ const GREY: wgpu::Color = wgpu::Color {
 const MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Stencil8;
 
 pub struct Render {
-    surface: wgpu::Surface,
+    surface: wgpu::Surface<'static>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
@@ -33,13 +35,17 @@ pub struct Render {
 }
 
 impl Render {
-    pub async fn new(window: &winit::window::Window) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new(
+        window: Arc<winit::window::Window>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         log::info!("initializing the surface...");
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
+            flags: InstanceFlags::default(),
             dx12_shader_compiler: Default::default(),
+            gles_minor_version: Gles3MinorVersion::default(),
         });
-        let surface = unsafe { instance.create_surface(&window) }?;
+        let surface = instance.create_surface(window.clone())?;
         let size = window.inner_size();
         let camera = crate::camera::Camera::new(size.width, size.height);
         let adapter = instance
@@ -55,8 +61,9 @@ impl Render {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    features: wgpu::Features::empty(),
-                    limits: wgpu::Limits::default(),
+                    required_features: wgpu::Features::empty(),
+                    required_limits: wgpu::Limits::default(),
+                    memory_hints: MemoryHints::default(),
                     label: None,
                 },
                 None,
@@ -71,6 +78,7 @@ impl Render {
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::Fifo,
+            desired_maximum_frame_latency: 2,
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
             view_formats: vec![],
         };
@@ -225,12 +233,14 @@ impl Render {
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
+                compilation_options: PipelineCompilationOptions::default(),
                 buffers: &[crate::vertex::Vertex::desc()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: "fs_main",
+                entry_point: Some("fs_main"),
+                compilation_options: PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
@@ -260,18 +270,21 @@ impl Render {
             }),
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
+            cache: None,
         });
         let mask_in_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: None,
             layout: Some(&mask_render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
+                compilation_options: PipelineCompilationOptions::default(),
                 buffers: &[crate::vertex::Vertex::desc()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &mask_shader,
-                entry_point: "fs_main",
+                entry_point: Some("fs_main"),
+                compilation_options: PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
                     blend: None,
@@ -297,18 +310,21 @@ impl Render {
             }),
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
+            cache: None,
         });
         let mask_out_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: None,
             layout: Some(&mask_render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
+                compilation_options: PipelineCompilationOptions::default(),
                 buffers: &[crate::vertex::Vertex::desc()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &mask_shader,
-                entry_point: "fs_main",
+                entry_point: Some("fs_main"),
+                compilation_options: PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
                     blend: None,
@@ -334,6 +350,7 @@ impl Render {
             }),
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
+            cache: None,
         });
 
         Ok(Self {
@@ -501,7 +518,7 @@ impl Render {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(GREY),
-                        store: true,
+                        store: wgpu::StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
@@ -509,9 +526,11 @@ impl Render {
                     depth_ops: None,
                     stencil_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(0),
-                        store: true,
+                        store: wgpu::StoreOp::Store,
                     }),
                 }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
             });
             render_pass.set_stencil_reference(0);
 
@@ -538,7 +557,7 @@ impl Render {
                                 resolve_target: None,
                                 ops: wgpu::Operations {
                                     load: wgpu::LoadOp::Load,
-                                    store: true,
+                                    store: wgpu::StoreOp::Store,
                                 },
                             })],
                             depth_stencil_attachment: Some(
@@ -547,10 +566,12 @@ impl Render {
                                     depth_ops: None,
                                     stencil_ops: Some(wgpu::Operations {
                                         load: wgpu::LoadOp::Load,
-                                        store: true,
+                                        store: wgpu::StoreOp::Store,
                                     }),
                                 },
                             ),
+                            timestamp_writes: None,
+                            occlusion_query_set: None,
                         });
                         render_pass.set_stencil_reference(0);
                     }
