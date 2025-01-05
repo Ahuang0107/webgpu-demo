@@ -1,5 +1,7 @@
 use crate::sprite::Sprite;
 use blend_mode::*;
+use winit::event::StartCause;
+use winit::event_loop::EventLoop;
 
 mod blend_mode;
 mod camera;
@@ -12,7 +14,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("webgpu_demo"))
         .init();
 
-    let event_loop = winit::event_loop::EventLoop::new();
+    let event_loop = winit::event_loop::EventLoop::new()?;
     let size = winit::dpi::PhysicalSize::new(256 * 6, 256 * 3);
     let window = winit::window::WindowBuilder::new()
         .with_inner_size(size)
@@ -43,34 +45,36 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut total_render_time = std::time::Duration::new(0, 0); // 总渲染时间
 
     log::info!("Entering render loop...");
-    event_loop.run(move |event, _, control_flow| match event {
-        winit::event::Event::RedrawRequested(_) => {
-            let frame_start = std::time::Instant::now();
-            render.render();
-            let render_duration = frame_start.elapsed();
-            total_render_time += render_duration;
-            frame_count += 1;
-            if last_frame_time.elapsed() >= std::time::Duration::new(1, 0) {
-                let fps = frame_count as f32 / last_frame_time.elapsed().as_secs_f32();
-                println!("FPS: {:.2}", fps);
-                println!(
-                    "Average render time per frame: {:.2}ms",
-                    total_render_time.as_secs_f32() * 1000.0 / frame_count as f32
-                );
-                last_frame_time = std::time::Instant::now();
-                frame_count = 0;
-                total_render_time = std::time::Duration::new(0, 0);
-            }
-        }
-        winit::event::Event::MainEventsCleared => {
-            window.request_redraw();
-        }
+    let _ = EventLoop::run(event_loop, move |event, target| match event {
+        winit::event::Event::NewEvents(StartCause::Init) => {}
+        winit::event::Event::NewEvents(StartCause::Poll) => {}
+        winit::event::Event::Resumed => {}
+        winit::event::Event::Suspended => {}
         winit::event::Event::WindowEvent { event, .. } => match event {
+            winit::event::WindowEvent::RedrawRequested => {
+                let frame_start = std::time::Instant::now();
+                render.render();
+                let render_duration = frame_start.elapsed();
+                total_render_time += render_duration;
+                frame_count += 1;
+                if last_frame_time.elapsed() >= std::time::Duration::new(1, 0) {
+                    let fps = frame_count as f32 / last_frame_time.elapsed().as_secs_f32();
+                    println!("FPS: {:.2}", fps);
+                    println!(
+                        "Average render time per frame: {:.2}ms",
+                        total_render_time.as_secs_f32() * 1000.0 / frame_count as f32
+                    );
+                    last_frame_time = std::time::Instant::now();
+                    frame_count = 0;
+                    total_render_time = std::time::Duration::new(0, 0);
+                }
+            }
             winit::event::WindowEvent::CloseRequested => {
-                *control_flow = winit::event_loop::ControlFlow::Exit;
+                target.exit();
             }
             winit::event::WindowEvent::Resized(physical_size) => {
                 render.resize(physical_size.width, physical_size.height);
+                window.request_redraw();
             }
             winit::event::WindowEvent::CursorMoved { position, .. } => {
                 // println!("CursorMoved: {position:?}");
@@ -78,11 +82,14 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 render.sprites[1].y = position.y as f32;
                 render.sprites[3].x = position.x as f32;
                 render.sprites[3].y = position.y as f32;
+                window.request_redraw();
             }
             _ => {}
         },
         _ => {}
     });
+
+    Ok(())
 }
 
 fn main() {
