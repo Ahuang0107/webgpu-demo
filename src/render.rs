@@ -490,18 +490,40 @@ impl Render {
             label: None,
         });
 
+        let instances = self.instances();
+
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         {
-            for (index, raw_sprite) in self.instances().iter().enumerate() {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: None,
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &frame_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(GREY),
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &mask_view,
+                    depth_ops: None,
+                    stencil_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(0),
+                        store: true,
+                    }),
+                }),
+            });
+            render_pass.set_stencil_reference(0);
+
+            for raw_sprite in instances.iter() {
                 {
-                    // TODO find the problem, in bevy all the command submit after RenderGraphRunner run all graphs
-                    //  I can not do the copy staff during in any RenderPhases
-                    // let mut encoder = self
-                    //     .device
-                    //     .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+                    // 如果需要使用到 grab pass
+                    // 就需要 drop 之前创建 render_pass 然后做 grab screen 的操作
+                    // 然后再重新创建一个新的 render_pass
                     if raw_sprite.blend_mode != BlendMode::Normal {
+                        drop(render_pass);
                         encoder.copy_texture_to_texture(
                             frame.texture.as_image_copy(),
                             self.grab_texture.as_image_copy(),
@@ -511,37 +533,31 @@ impl Render {
                                 depth_or_array_layers: 1,
                             },
                         );
+                        render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: None,
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view: &frame_view,
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    load: wgpu::LoadOp::Load,
+                                    store: true,
+                                },
+                            })],
+                            depth_stencil_attachment: Some(
+                                wgpu::RenderPassDepthStencilAttachment {
+                                    view: &mask_view,
+                                    depth_ops: None,
+                                    stencil_ops: Some(wgpu::Operations {
+                                        load: wgpu::LoadOp::Load,
+                                        store: true,
+                                    }),
+                                },
+                            ),
+                        });
+                        render_pass.set_stencil_reference(0);
                     }
-                    // self.queue.submit(Some(encoder.finish()));
                 }
-                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: None,
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &frame_view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: if index == 0 {
-                                wgpu::LoadOp::Clear(GREY)
-                            } else {
-                                wgpu::LoadOp::Load
-                            },
-                            store: true,
-                        },
-                    })],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &mask_view,
-                        depth_ops: None,
-                        stencil_ops: Some(wgpu::Operations {
-                            load: if index == 0 {
-                                wgpu::LoadOp::Clear(0)
-                            } else {
-                                wgpu::LoadOp::Load
-                            },
-                            store: true,
-                        }),
-                    }),
-                });
-                render_pass.set_stencil_reference(0);
+
                 if let Some(texture) = self.textures.get(&raw_sprite.texture_id) {
                     if raw_sprite.mask_in || raw_sprite.mask_out {
                         if raw_sprite.mask_in {
