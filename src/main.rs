@@ -38,10 +38,29 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     render.sprites.extend(sprites);
 
+    let mut last_frame_time = std::time::Instant::now(); // 上一帧的时间
+    let mut frame_count = 0; // 渲染的帧数
+    let mut total_render_time = std::time::Duration::new(0, 0); // 总渲染时间
+
     log::info!("Entering render loop...");
     event_loop.run(move |event, _, control_flow| match event {
         winit::event::Event::RedrawRequested(_) => {
+            let frame_start = std::time::Instant::now();
             render.render();
+            let render_duration = frame_start.elapsed();
+            total_render_time += render_duration;
+            frame_count += 1;
+            if last_frame_time.elapsed() >= std::time::Duration::new(1, 0) {
+                let fps = frame_count as f32 / last_frame_time.elapsed().as_secs_f32();
+                println!("FPS: {:.2}", fps);
+                println!(
+                    "Average render time per frame: {:.2}ms",
+                    total_render_time.as_secs_f32() * 1000.0 / frame_count as f32
+                );
+                last_frame_time = std::time::Instant::now();
+                frame_count = 0;
+                total_render_time = std::time::Duration::new(0, 0);
+            }
         }
         winit::event::Event::MainEventsCleared => {
             window.request_redraw();
