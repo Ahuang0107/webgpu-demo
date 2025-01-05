@@ -8,7 +8,8 @@ pub struct Sprite {
     pub height: f32,
     pub texture_id: u32,
     pub blend_mode: BlendMode,
-    pub if_mask: bool,
+    pub mask_in: bool,
+    pub mask_out: bool,
     pub window_size: [u32; 2],
 }
 
@@ -21,7 +22,8 @@ impl Sprite {
             height: size[1],
             texture_id,
             blend_mode: BlendMode::Normal,
-            if_mask: false,
+            mask_in: false,
+            mask_out: false,
             window_size: [0, 0],
         }
     }
@@ -31,6 +33,14 @@ impl Sprite {
     }
     pub fn with_window_size(mut self, window_size: [u32; 2]) -> Self {
         self.window_size = window_size;
+        self
+    }
+    pub fn with_mask_in(mut self) -> Self {
+        self.mask_in = true;
+        self
+    }
+    pub fn with_mask_out(mut self) -> Self {
+        self.mask_out = true;
         self
     }
     pub fn set_window_size(&mut self, window_size: [u32; 2]) {
@@ -57,7 +67,8 @@ pub struct RawSprite {
     pub index_buffer: wgpu::Buffer,
     pub texture_id: u32,
     pub blend_mode: BlendMode,
-    pub if_mask: bool,
+    pub mask_in: bool,
+    pub mask_out: bool,
 }
 
 fn cal_vertices<'a>(p: [(f32, f32); 4], size: [u32; 2], blend_mode: BlendMode) -> [Vertex; 4] {

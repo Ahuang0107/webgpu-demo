@@ -1,6 +1,5 @@
 use crate::sprite::Sprite;
 use blend_mode::*;
-use vertex::*;
 
 mod blend_mode;
 mod camera;
@@ -24,10 +23,13 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let texture1 = render.load_texture(include_bytes!("example.png"))?;
     let texture2 = render.load_texture(include_bytes!("example2.png"))?;
     let texture3 = render.load_texture(include_bytes!("example3.png"))?;
+    let texture4 = render.load_texture(include_bytes!("mask_example.png"))?;
 
     let sprites = vec![
         Sprite::new([100.0, 100.0], [300.0, 300.0], texture1),
-        Sprite::new([350.0, 100.0], [264.0, 264.0], texture2).with_blend_mode(BlendMode::SoftLight),
+        Sprite::new([100.0, 100.0], [600.0, 400.0], texture4).with_mask_in(),
+        Sprite::new([350.0, 100.0], [264.0, 264.0], texture2).with_blend_mode(BlendMode::Normal),
+        Sprite::new([100.0, 100.0], [600.0, 400.0], texture4).with_mask_out(),
         Sprite::new([300.0, 300.0], [400.0, 200.0], texture3).with_blend_mode(BlendMode::SoftLight),
     ]
     .into_iter()
