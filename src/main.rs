@@ -37,11 +37,12 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     .collect::<Vec<Sprite>>();
 
     render.sprites.extend(sprites);
-    render.render();
 
     log::info!("Entering render loop...");
     event_loop.run(move |event, _, control_flow| match event {
-        winit::event::Event::RedrawRequested(_) => {}
+        winit::event::Event::RedrawRequested(_) => {
+            render.render();
+        }
         winit::event::Event::MainEventsCleared => {
             window.request_redraw();
         }
@@ -51,6 +52,13 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             winit::event::WindowEvent::Resized(physical_size) => {
                 render.resize(physical_size.width, physical_size.height);
+            }
+            winit::event::WindowEvent::CursorMoved { position, .. } => {
+                // println!("CursorMoved: {position:?}");
+                render.sprites[1].x = position.x as f32;
+                render.sprites[1].y = position.y as f32;
+                render.sprites[3].x = position.x as f32;
+                render.sprites[3].y = position.y as f32;
             }
             _ => {}
         },
