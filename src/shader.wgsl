@@ -10,7 +10,7 @@ struct CameraUniform {
 
 struct VertexInput {
     @location(0) position: vec2<f32>,
-    @location(1) color: vec3<f32>,
+    @location(1) color: vec4<f32>,
     @location(2) tex_coords: vec2<f32>,
     @location(3) blend_mode: u32,
 };
@@ -27,7 +27,7 @@ fn vs_main(
     model: VertexInput,
 ) -> VertexOutput {
     var out: VertexOutput;
-        out.color = vec4<f32>(model.color, 1.0);
+        out.color = model.color;
         out.tex_coords = model.tex_coords;
         out.clip_position = vec4<f32>(model.position.xy, 0.0, 1.0);
         out.blend_mode = model.blend_mode;
@@ -42,11 +42,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         in.clip_position.y / camera.size.y
     );
     var grab_color = textureSample(t_grab, s_grab, viewport_uv);
-    // NOTE 显示设备通常使用 sRGB 空间（gamma space），导入的 texture 也设定的是 rRGB，进行混合处理时需要再线性空间（linear space）下操作
-    //  https://zhuanlan.zhihu.com/p/66558476
-    grab_color = pow(grab_color, vec4(1.0 / 2.2));
     var texture_color = in.color * textureSample(t_diffuse, s_diffuse, in.tex_coords);
-    texture_color = pow(texture_color, vec4(1.0 / 2.2));
     var out: vec4<f32> = texture_color;
     if in.blend_mode == 11u {
         let result_rgb = multiply(grab_color.rgb, texture_color.rgb);
@@ -72,7 +68,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         out.g = result_rgb.g * out.a;
         out.b = result_rgb.b * out.a;
     }
-    out = pow(out, vec4(2.2));
     return out;
 }
 
