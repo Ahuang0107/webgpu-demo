@@ -3,7 +3,10 @@ use crate::sprite::{RawSprite, Sprite};
 use std::collections::HashMap;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
-use wgpu::{Gles3MinorVersion, InstanceFlags, MemoryHints, PipelineCompilationOptions};
+use wgpu::{
+    BlendComponent, BlendFactor, BlendOperation, Gles3MinorVersion, InstanceFlags, MemoryHints,
+    PipelineCompilationOptions,
+};
 
 #[allow(dead_code)]
 const GREY: wgpu::Color = wgpu::Color {
@@ -243,7 +246,18 @@ impl Render {
                 compilation_options: PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    blend: Some(wgpu::BlendState {
+                        color: BlendComponent {
+                            src_factor: BlendFactor::SrcAlpha,
+                            dst_factor: BlendFactor::OneMinusSrcAlpha,
+                            operation: BlendOperation::Add,
+                        },
+                        alpha: BlendComponent {
+                            src_factor: BlendFactor::One,
+                            dst_factor: BlendFactor::OneMinusSrcAlpha,
+                            operation: BlendOperation::Add,
+                        },
+                    }),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
@@ -517,7 +531,7 @@ impl Render {
                     view: &frame_view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(GREY),
+                        load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
                         store: wgpu::StoreOp::Store,
                     },
                 })],

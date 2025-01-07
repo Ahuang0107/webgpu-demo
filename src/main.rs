@@ -15,6 +15,12 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("webgpu_demo"))
         .init();
 
+    let display_alpha = 231.0 / 255.0;
+    let src_display_alpha: f64 = 1.0 - display_alpha;
+    println!("显示出来的颜色的 alpha 是 {}", display_alpha);
+    println!("说明叠加上去的颜色的 alpha 是 {}", src_display_alpha);
+    println!("说明片元输出时的 alpha 是 {}", src_display_alpha.powf(2.2));
+
     let event_loop = winit::event_loop::EventLoop::new()?;
     let size = winit::dpi::PhysicalSize::new(256 * 6, 256 * 3);
     let window = winit::window::WindowBuilder::new()
@@ -28,6 +34,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let texture2 = render.load_texture(include_bytes!("example2.png"))?;
     let texture3 = render.load_texture(include_bytes!("example3.png"))?;
     let texture4 = render.load_texture(include_bytes!("mask_example.png"))?;
+    let texture5 = render.load_texture(include_bytes!("black_20_alpha_text.png"))?;
+    let texture6 = render.load_texture(include_bytes!("black_test.png"))?;
 
     let sprites = vec![
         Sprite::new([100.0, 100.0], [300.0, 300.0], texture1),
@@ -35,6 +43,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         Sprite::new([350.0, 100.0], [264.0, 264.0], texture2).with_blend_mode(BlendMode::Normal),
         Sprite::new([100.0, 100.0], [600.0, 400.0], texture4).with_mask_out(),
         Sprite::new([300.0, 300.0], [400.0, 200.0], texture3).with_blend_mode(BlendMode::SoftLight),
+        Sprite::new([700.0, 300.0], [64.0, 64.0], texture5),
+        Sprite::new([800.0, 300.0], [64.0, 64.0], texture6).with_opacity(51),
     ]
     .into_iter()
     .map(|s| s.with_window_size([window.inner_size().width, window.inner_size().height]))
