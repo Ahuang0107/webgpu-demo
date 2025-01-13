@@ -5,7 +5,6 @@ edition = "2021"
 
 [dependencies]
 winit = "0.29.0"
-async-executor = "1.0"
 wgpu = "23.0.1"
 pollster = "0.2"
 env_logger = "0.10"
