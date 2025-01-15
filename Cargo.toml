@@ -16,3 +16,7 @@ glam = "0.23.0"
 version = "0.24"
 default-features = false
 features = ["png"]
+
+[[bin]]
+name = "simple_draw"
+path = "src/bin/simple_draw.rs"
