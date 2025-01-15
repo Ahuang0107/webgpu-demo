@@ -64,26 +64,6 @@ impl VertexInput {
     }
 }
 
-pub const VERTICES: &[VertexInput] = &[
-    VertexInput {
-        position: [-0.0868241, 0.49240386],
-    }, // A
-    VertexInput {
-        position: [-0.49513406, 0.06958647],
-    }, // B
-    VertexInput {
-        position: [-0.21918549, -0.44939706],
-    }, // C
-    VertexInput {
-        position: [0.35966998, -0.3473291],
-    }, // D
-    VertexInput {
-        position: [0.44147372, 0.2347359],
-    }, // E
-];
-
-pub const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4];
-
 pub struct Render {
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
@@ -183,12 +163,32 @@ impl Render {
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&VERTICES),
+            contents: bytemuck::cast_slice(&[
+                VertexInput {
+                    position: [-0.0868241, 0.49240386],
+                }, // A
+                VertexInput {
+                    position: [-0.49513406, 0.06958647],
+                }, // B
+                VertexInput {
+                    position: [-0.21918549, -0.44939706],
+                }, // C
+                VertexInput {
+                    position: [0.35966998, -0.3473291],
+                }, // D
+                VertexInput {
+                    position: [0.44147372, 0.2347359],
+                }, // E
+            ]),
             usage: wgpu::BufferUsages::VERTEX,
         });
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(&INDICES),
+            // NOTE 注意渲染结果一直有问题的原因在，这里的 index 数据的数据类型，是需要跟
+            //  render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            //  时的 IndexFormat 保持一直的，之前 IndexFormat 定义是 Uint16 但是这里给的 index 数据并没有指定类型
+            //  默认情况下是 i32 类型的，就出现了隐式数据对齐问题，指定 u16 就没有问题了
+            contents: bytemuck::cast_slice(&[0_u16, 1, 4, 1, 2, 4, 2, 3, 4]),
             usage: wgpu::BufferUsages::INDEX,
         });
 
@@ -239,7 +239,7 @@ impl Render {
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..INDICES.len() as u32, 0, 0..1);
+            render_pass.draw_indexed(0..9_u32, 0, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
