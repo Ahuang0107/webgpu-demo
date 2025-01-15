@@ -7,7 +7,11 @@ pub struct Render {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
+    texture_layout: wgpu::BindGroupLayout,
     render_pipeline: wgpu::RenderPipeline,
+    main_texture: wgpu::Texture,
+    main_vertex_buffer: wgpu::Buffer,
+    main_index_buffer: wgpu::Buffer,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     texture_bind_group: wgpu::BindGroup,
@@ -122,6 +126,48 @@ impl Render {
             cache: None,
         });
 
+        let main_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Example Texture"),
+            size: wgpu::Extent3d {
+                width: size.width,
+                height: size.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: TEXTURE_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let main_vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(&[
+                VertexInput {
+                    position: [-1.0, 1.0],
+                    uv: [0.0, 0.0],
+                },
+                VertexInput {
+                    position: [-1.0, -1.0],
+                    uv: [0.0, 1.0],
+                },
+                VertexInput {
+                    position: [1.0, -1.0],
+                    uv: [1.0, 1.0],
+                },
+                VertexInput {
+                    position: [1.0, 1.0],
+                    uv: [1.0, 0.0],
+                },
+            ]),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+        let main_index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Index Buffer"),
+            contents: bytemuck::cast_slice(&[0_u16, 1, 2, 0, 2, 3]),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             contents: bytemuck::cast_slice(&[
@@ -155,14 +201,14 @@ impl Render {
         });
 
         let image = image::open("./src/example.png")?.to_rgba8();
-        let size = wgpu::Extent3d {
+        let image_size = wgpu::Extent3d {
             width: image.width(),
             height: image.height(),
             depth_or_array_layers: 1,
         };
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Example Texture"),
-            size,
+            size: image_size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -183,7 +229,7 @@ impl Render {
                 bytes_per_row: Some(4 * image.width()),
                 rows_per_image: Some(image.height()),
             },
-            size,
+            image_size,
         );
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
@@ -207,7 +253,11 @@ impl Render {
             device,
             queue,
             config,
+            texture_layout,
             render_pipeline,
+            main_texture,
+            main_vertex_buffer,
+            main_index_buffer,
             vertex_buffer,
             index_buffer,
             texture_bind_group,
@@ -227,6 +277,9 @@ impl Render {
         let frame_view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+        let main_view = self
+            .main_texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
@@ -235,7 +288,7 @@ impl Render {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &frame_view,
+                    view: &main_view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
@@ -251,6 +304,47 @@ impl Render {
             render_pass.set_bind_group(0, &self.texture_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.draw_indexed(0..6_u32, 0, 0..1);
+        }
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &frame_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            let main_texture_bind_group =
+                self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    layout: &self.texture_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&main_view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(
+                                &self
+                                    .device
+                                    .create_sampler(&wgpu::SamplerDescriptor::default()),
+                            ),
+                        },
+                    ],
+                    label: None,
+                });
+            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_bind_group(0, &main_texture_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, self.main_vertex_buffer.slice(..));
+            render_pass
+                .set_index_buffer(self.main_index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..6_u32, 0, 0..1);
         }
 
