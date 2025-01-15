@@ -19,4 +19,4 @@ features = ["png"]
 
 [[bin]]
 name = "simple_draw"
-path = "src/bin/simple_draw.rs"
+path = "src/bin/simple_draw/main.rs"
