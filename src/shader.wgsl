@@ -69,10 +69,19 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         out.b = result_rgb.b * out.a;
     }
     if in.blend_mode == 60u {
-        let color1 = textureSample(t_grab, s_grab, vec2<f32>((in.clip_position.x - 2.0) / camera.size.x,in.clip_position.y / camera.size.y)).rgb;
-        let color2 = textureSample(t_grab, s_grab, viewport_uv).rgb;
-        let color3 = textureSample(t_grab, s_grab, vec2<f32>((in.clip_position.x + 2.0) / camera.size.x,in.clip_position.y / camera.size.y)).rgb;
-        out = vec4(color1 * 0.2533 + color2 * 0.49338 + color3 * 0.2533, 1.0);
+        let kernel: array<f32, 9> = array<f32, 9>(0.075, 0.124, 0.075, 0.124, 0.204, 0.124, 0.075, 0.124, 0.075);
+        let offset_x: array<f32, 9> = array<f32, 9>(-2.0, 0.0, 2.0, -2.0, 0.0, 2.0, -2.0, 0.0, 2.0);
+        let offset_y: array<f32, 9> = array<f32, 9>(-2.0, -2.0, -2.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0);
+
+        var color: vec3<f32> = vec3<f32>(0.0);
+        for (var i: i32 = 0; i < 9; i = i + 1) {
+            let sample_uv = vec2<f32>(
+                (in.clip_position.x + offset_x[i]) / camera.size.x,
+                (in.clip_position.y + offset_y[i]) / camera.size.y
+            );
+            color += textureSample(t_grab, s_grab, sample_uv).rgb * kernel[i];
+        }
+        out = vec4(color.rgb, 1.0);
     }
     return out;
 }
