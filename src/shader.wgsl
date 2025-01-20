@@ -68,6 +68,12 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         out.g = result_rgb.g * out.a;
         out.b = result_rgb.b * out.a;
     }
+    if in.blend_mode == 60u {
+        let color1 = textureSample(t_grab, s_grab, vec2<f32>((in.clip_position.x - 2.0) / camera.size.x,in.clip_position.y / camera.size.y)).rgb;
+        let color2 = textureSample(t_grab, s_grab, viewport_uv).rgb;
+        let color3 = textureSample(t_grab, s_grab, vec2<f32>((in.clip_position.x + 2.0) / camera.size.x,in.clip_position.y / camera.size.y)).rgb;
+        out = vec4(color1 * 0.2533 + color2 * 0.49338 + color3 * 0.2533, 1.0);
+    }
     return out;
 }
 

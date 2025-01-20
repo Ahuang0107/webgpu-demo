@@ -22,4 +22,5 @@ pub enum BlendMode {
     // Saturation = 51,
     // Color = 52,
     // Luminosity = 53,
+    Blur = 60,
 }

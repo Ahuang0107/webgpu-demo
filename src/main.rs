@@ -41,6 +41,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         Sprite::new([300.0, 300.0], [400.0, 200.0], texture3).with_blend_mode(BlendMode::SoftLight),
         Sprite::new([700.0, 300.0], [64.0, 64.0], texture5),
         Sprite::new([800.0, 300.0], [64.0, 64.0], texture6).with_opacity(51),
+        Sprite::new([150.0, 250.0], [450.0, 100.0], 0).with_blend_mode(BlendMode::Blur),
     ]
     .into_iter()
     .map(|s| s.with_window_size([window.inner_size().width, window.inner_size().height]))
@@ -86,10 +87,12 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             winit::event::WindowEvent::CursorMoved { position, .. } => {
                 // println!("CursorMoved: {position:?}");
-                render.sprites[1].x = position.x as f32;
-                render.sprites[1].y = position.y as f32;
-                render.sprites[3].x = position.x as f32;
-                render.sprites[3].y = position.y as f32;
+                // render.sprites[1].x = position.x as f32;
+                // render.sprites[1].y = position.y as f32;
+                // render.sprites[3].x = position.x as f32;
+                // render.sprites[3].y = position.y as f32;
+                render.sprites[7].x = position.x as f32;
+                render.sprites[7].y = position.y as f32;
                 window.request_redraw();
             }
             _ => {}

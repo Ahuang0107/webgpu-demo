@@ -578,36 +578,40 @@ impl Render {
                     }
                 }
 
-                if let Some(texture) = self.textures.get(&raw_sprite.texture_id) {
-                    if raw_sprite.mask_in || raw_sprite.mask_out {
-                        if raw_sprite.mask_in {
-                            render_pass.set_pipeline(&self.mask_in_pipeline);
-                        } else {
-                            render_pass.set_pipeline(&self.mask_out_pipeline);
-                        }
-                        render_pass.set_bind_group(0, &texture.bind_group, &[]);
-                        render_pass.set_vertex_buffer(0, raw_sprite.vertex_buffer.slice(..));
-                        render_pass.set_index_buffer(
-                            raw_sprite.index_buffer.slice(..),
-                            wgpu::IndexFormat::Uint16,
-                        );
-                        render_pass.draw_indexed(0..6, 0, 0..1);
+                let texture_bind_group =
+                    if let Some(texture) = self.textures.get(&raw_sprite.texture_id) {
+                        &texture.bind_group
                     } else {
-                        render_pass.set_pipeline(&self.render_pipeline);
-                        render_pass.set_bind_group(0, &camera_bind_group, &[]);
-                        render_pass.set_bind_group(1, &texture.bind_group, &[]);
-                        if raw_sprite.blend_mode != BlendMode::Normal {
-                            render_pass.set_bind_group(2, &self.grab_texture_bind_group, &[]);
-                        } else {
-                            render_pass.set_bind_group(2, &self.empty_texture_bind_group, &[]);
-                        }
-                        render_pass.set_vertex_buffer(0, raw_sprite.vertex_buffer.slice(..));
-                        render_pass.set_index_buffer(
-                            raw_sprite.index_buffer.slice(..),
-                            wgpu::IndexFormat::Uint16,
-                        );
-                        render_pass.draw_indexed(0..6, 0, 0..1);
+                        &self.empty_texture_bind_group
+                    };
+                if raw_sprite.mask_in || raw_sprite.mask_out {
+                    if raw_sprite.mask_in {
+                        render_pass.set_pipeline(&self.mask_in_pipeline);
+                    } else {
+                        render_pass.set_pipeline(&self.mask_out_pipeline);
                     }
+                    render_pass.set_bind_group(0, texture_bind_group, &[]);
+                    render_pass.set_vertex_buffer(0, raw_sprite.vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(
+                        raw_sprite.index_buffer.slice(..),
+                        wgpu::IndexFormat::Uint16,
+                    );
+                    render_pass.draw_indexed(0..6, 0, 0..1);
+                } else {
+                    render_pass.set_pipeline(&self.render_pipeline);
+                    render_pass.set_bind_group(0, &camera_bind_group, &[]);
+                    render_pass.set_bind_group(1, texture_bind_group, &[]);
+                    if raw_sprite.blend_mode == BlendMode::Normal {
+                        render_pass.set_bind_group(2, &self.empty_texture_bind_group, &[]);
+                    } else {
+                        render_pass.set_bind_group(2, &self.grab_texture_bind_group, &[]);
+                    }
+                    render_pass.set_vertex_buffer(0, raw_sprite.vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(
+                        raw_sprite.index_buffer.slice(..),
+                        wgpu::IndexFormat::Uint16,
+                    );
+                    render_pass.draw_indexed(0..6, 0, 0..1);
                 }
             }
         }
