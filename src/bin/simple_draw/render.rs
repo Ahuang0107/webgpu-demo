@@ -1,5 +1,5 @@
-use crate::VertexInput;
 use crate::TEXTURE_FORMAT;
+use crate::{VertexInput, SRGB_TEXTURE_FORMAT};
 use wgpu::util::DeviceExt;
 
 pub struct Render {
@@ -9,6 +9,7 @@ pub struct Render {
     config: wgpu::SurfaceConfiguration,
     texture_layout: wgpu::BindGroupLayout,
     render_pipeline: wgpu::RenderPipeline,
+    drawback_pipeline: wgpu::RenderPipeline,
     main_texture: wgpu::Texture,
     main_vertex_buffer: wgpu::Buffer,
     main_index_buffer: wgpu::Buffer,
@@ -55,7 +56,7 @@ impl Render {
         let size = window.inner_size();
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: TEXTURE_FORMAT,
+            format: SRGB_TEXTURE_FORMAT,
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::Fifo,
@@ -108,7 +109,46 @@ impl Render {
                 entry_point: Some("fs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
+                    format: TEXTURE_FORMAT,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+        let drawback_shader =
+            device.create_shader_module(wgpu::include_wgsl!("drawback_shader.wgsl"));
+        let drawback_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Render Pipeline"),
+            layout: Some(
+                &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("Render Pipeline Layout"),
+                    bind_group_layouts: &[&texture_layout],
+                    push_constant_ranges: &[],
+                }),
+            ),
+            vertex: wgpu::VertexState {
+                module: &drawback_shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[VertexInput::desc()],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &drawback_shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: SRGB_TEXTURE_FORMAT,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -255,6 +295,7 @@ impl Render {
             config,
             texture_layout,
             render_pipeline,
+            drawback_pipeline,
             main_texture,
             main_vertex_buffer,
             main_index_buffer,
@@ -340,7 +381,7 @@ impl Render {
                     ],
                     label: None,
                 });
-            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_pipeline(&self.drawback_pipeline);
             render_pass.set_bind_group(0, &main_texture_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.main_vertex_buffer.slice(..));
             render_pass
