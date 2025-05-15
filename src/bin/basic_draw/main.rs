@@ -114,6 +114,7 @@ pub struct Camera2D {
 }
 
 impl Camera2D {
+    #[inline(always)]
     fn new(viewport_size: Vec2) -> Camera2D {
         Camera2D {
             viewport_origin: Vec2::splat(0.5),
@@ -121,6 +122,8 @@ impl Camera2D {
             transform: Transform::IDENTITY,
         }
     }
+
+    #[inline(always)]
     fn area(&self) -> Rect {
         let origin_x = self.viewport_size.x * self.viewport_origin.x;
         let origin_y = self.viewport_size.y * self.viewport_origin.y;
@@ -132,16 +135,24 @@ impl Camera2D {
             self.viewport_size.y - origin_y,
         )
     }
+
+    #[inline(always)]
     fn get_clip_from_view(&self) -> Mat4 {
         let area = self.area();
         Mat4::orthographic_rh(area.min.x, area.max.x, area.min.y, area.max.y, 1000.0, 0.0)
     }
+
+    #[inline(always)]
     fn get_world_from_view(&self) -> Mat4 {
         self.transform.compute_matrix()
     }
+
+    #[inline(always)]
     fn get_view_from_world(&self) -> Mat4 {
         self.get_world_from_view().inverse()
     }
+
+    #[inline(always)]
     pub fn get_clip_from_world(&self) -> Mat4 {
         self.get_clip_from_view() * self.get_view_from_world()
     }
@@ -200,6 +211,7 @@ impl Transform {
 }
 
 impl Sprite {
+    #[inline(always)]
     pub fn calculate_transform(&self) -> Affine3A {
         let quad_size = self
             .custom_size
@@ -212,6 +224,7 @@ impl Sprite {
                 (quad_size * (-self.anchor - Vec2::splat(0.5))).extend(0.0),
             )
     }
+    #[inline(always)]
     pub fn calculate_uv_offset_scale(&self) -> Vec4 {
         let mut uv_offset_scale: Vec4;
 
@@ -308,7 +321,7 @@ impl Render {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         log::info!("initializing the surface...");
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all(),
+            backends: wgpu::Backends::VULKAN,
             flags: wgpu::InstanceFlags::default(),
             dx12_shader_compiler: wgpu::Dx12Compiler::default(),
             gles_minor_version: wgpu::Gles3MinorVersion::default(),
