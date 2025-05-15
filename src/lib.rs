@@ -10,7 +10,6 @@ pub struct Render {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     view_uniform_bind_group_layout: wgpu::BindGroupLayout,
-    #[allow(unused)]
     texture_bind_group_layout: wgpu::BindGroupLayout,
     render_pipeline: wgpu::RenderPipeline,
     textures: HashMap<u32, (Vec2, wgpu::BindGroup)>,
@@ -250,7 +249,7 @@ impl Render {
         window: std::sync::Arc<winit::window::Window>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         log::info!("initializing the surface...");
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             ..Default::default()
         });
@@ -268,15 +267,11 @@ impl Render {
         let caps = surface.get_capabilities(&adapter);
         log::info!("capabilities: {caps:?}");
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::default(),
-                    memory_hints: wgpu::MemoryHints::default(),
-                    label: None,
-                },
-                None,
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::default(),
+                ..Default::default()
+            })
             .await?;
         let size = window.inner_size();
         let config = wgpu::SurfaceConfiguration {
@@ -409,14 +404,14 @@ impl Render {
             view_formats: &[],
         });
         self.queue.write_texture(
-            wgpu::ImageCopyTexture {
+            wgpu::TexelCopyTextureInfo {
                 aspect: wgpu::TextureAspect::All,
                 texture: &texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
             },
             &image,
-            wgpu::ImageDataLayout {
+            wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * image.width()),
                 rows_per_image: Some(image.height()),
