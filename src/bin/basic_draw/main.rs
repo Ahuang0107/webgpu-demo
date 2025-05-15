@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use glam::{Affine3A, Mat4, Quat, Vec2, Vec3, Vec4};
+use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 use winit::keyboard::{KeyCode, PhysicalKey};
 
@@ -22,22 +23,43 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut render = Render::new(window.clone()).await?;
     let mut camera = Camera2D::new(Vec2::new(size.width as f32, size.height as f32));
-    let sprite = Sprite {
-        transform: Transform::IDENTITY,
-        image_size: Vec2::new(256.0, 256.0),
-        rect: None,
-        custom_size: None,
-        flip_x: false,
-        flip_y: false,
-        anchor: Vec2::ZERO,
-    };
+    let example_1 = render.load_texture(include_bytes!("example.png"));
+    let example_2 = render.load_texture(include_bytes!("example2.png"));
+    let sprites = vec![
+        Sprite {
+            transform: Transform {
+                translation: Vec3::new(150.0, 100.0, 1.0),
+                rotation: Quat::IDENTITY,
+                scale: Vec3::ONE,
+            },
+            texture_id: example_1,
+            rect: None,
+            custom_size: None,
+            flip_x: false,
+            flip_y: false,
+            anchor: Vec2::ZERO,
+        },
+        Sprite {
+            transform: Transform {
+                translation: Vec3::new(-200.0, -100.0, 0.0),
+                rotation: Quat::IDENTITY,
+                scale: Vec3::ONE,
+            },
+            texture_id: example_2,
+            rect: None,
+            custom_size: None,
+            flip_x: false,
+            flip_y: false,
+            anchor: Vec2::ZERO,
+        },
+    ];
 
     log::info!("Entering render loop...");
     let _ = winit::event_loop::EventLoop::run(event_loop, move |event, target| match event {
         winit::event::Event::WindowEvent { event, .. } => match event {
             winit::event::WindowEvent::RedrawRequested => {
                 // log::info!("Redraw requested...");
-                render.render(&camera, &sprite);
+                render.render(&camera, sprites.as_slice());
             }
             winit::event::WindowEvent::CursorMoved { .. } => {
                 window.request_redraw();
@@ -90,7 +112,7 @@ pub struct Render {
     #[allow(unused)]
     texture_bind_group_layout: wgpu::BindGroupLayout,
     render_pipeline: wgpu::RenderPipeline,
-    texture_bind_group: wgpu::BindGroup,
+    textures: HashMap<u32, (Vec2, wgpu::BindGroup)>,
 }
 
 pub struct Camera2D {
@@ -111,6 +133,9 @@ pub struct Camera2D {
     pub viewport_origin: Vec2,
     pub viewport_size: Vec2,
     pub transform: Transform,
+    /// sprite 的 z 越大，表示约 near（靠近镜头）
+    pub near: f32,
+    pub far: f32,
 }
 
 impl Camera2D {
@@ -120,6 +145,8 @@ impl Camera2D {
             viewport_origin: Vec2::splat(0.5),
             viewport_size,
             transform: Transform::IDENTITY,
+            near: -1000.0,
+            far: 1.0,
         }
     }
 
@@ -139,7 +166,9 @@ impl Camera2D {
     #[inline(always)]
     fn get_clip_from_view(&self) -> Mat4 {
         let area = self.area();
-        Mat4::orthographic_rh(area.min.x, area.max.x, area.min.y, area.max.y, 1000.0, 0.0)
+        Mat4::orthographic_rh(
+            area.min.x, area.max.x, area.min.y, area.max.y, self.near, self.far,
+        )
     }
 
     #[inline(always)]
@@ -168,7 +197,7 @@ pub struct ViewUniform {
 
 pub struct Sprite {
     pub transform: Transform,
-    pub image_size: Vec2,
+    pub texture_id: u32,
     /// Select an area of the texture
     pub rect: Option<Rect>,
     /// Change the on-screen size of the sprite
@@ -212,10 +241,10 @@ impl Transform {
 
 impl Sprite {
     #[inline(always)]
-    pub fn calculate_transform(&self) -> Affine3A {
+    pub fn calculate_transform(&self, image_size: Vec2) -> Affine3A {
         let quad_size = self
             .custom_size
-            .unwrap_or_else(|| self.rect.map(|r| r.size()).unwrap_or(self.image_size));
+            .unwrap_or_else(|| self.rect.map(|r| r.size()).unwrap_or(image_size));
 
         self.transform.compute_affine()
             * Affine3A::from_scale_rotation_translation(
@@ -225,17 +254,17 @@ impl Sprite {
             )
     }
     #[inline(always)]
-    pub fn calculate_uv_offset_scale(&self) -> Vec4 {
+    pub fn calculate_uv_offset_scale(&self, image_size: Vec2) -> Vec4 {
         let mut uv_offset_scale: Vec4;
 
         // If a rect is specified, adjust UVs and the size of the quad
         if let Some(rect) = self.rect {
             let rect_size = rect.size();
             uv_offset_scale = Vec4::new(
-                rect.min.x / self.image_size.x,
-                rect.max.y / self.image_size.y,
-                rect_size.x / self.image_size.x,
-                -rect_size.y / self.image_size.y,
+                rect.min.x / image_size.x,
+                rect.max.y / image_size.y,
+                rect_size.x / image_size.x,
+                -rect_size.y / image_size.y,
             );
         } else {
             uv_offset_scale = Vec4::new(0.0, 1.0, 1.0, -1.0);
@@ -443,7 +472,24 @@ impl Render {
             cache: None,
         });
 
-        let image_bytes = include_bytes!("example.png");
+        Ok(Render {
+            surface,
+            device,
+            queue,
+            config,
+            view_uniform_bind_group_layout,
+            texture_bind_group_layout,
+            render_pipeline,
+            textures: HashMap::new(),
+        })
+    }
+    pub fn resize(&mut self, width: u32, height: u32) {
+        log::info!("resize to ({},{})", width, height);
+        self.config.width = width;
+        self.config.height = height;
+        self.surface.configure(&self.device, &self.config);
+    }
+    pub fn load_texture(&mut self, image_bytes: &[u8]) -> u32 {
         let image = image::load_from_memory(image_bytes).unwrap();
         let image = image.to_rgba8();
         let image_size = wgpu::Extent3d {
@@ -451,7 +497,7 @@ impl Render {
             height: image.height(),
             depth_or_array_layers: 1,
         };
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Example Texture"),
             size: image_size,
             mip_level_count: 1,
@@ -461,7 +507,7 @@ impl Render {
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        queue.write_texture(
+        self.queue.write_texture(
             wgpu::ImageCopyTexture {
                 aspect: wgpu::TextureAspect::All,
                 texture: &texture,
@@ -478,9 +524,11 @@ impl Render {
         );
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
-        let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &texture_bind_group_layout,
+        let sampler = self
+            .device
+            .create_sampler(&wgpu::SamplerDescriptor::default());
+        let texture_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &self.texture_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -494,24 +542,17 @@ impl Render {
             label: None,
         });
 
-        Ok(Render {
-            surface,
-            device,
-            queue,
-            config,
-            view_uniform_bind_group_layout,
-            texture_bind_group_layout,
-            render_pipeline,
-            texture_bind_group,
-        })
+        let key = self.textures.len() as u32;
+        self.textures.insert(
+            key,
+            (
+                Vec2::new(image.width() as f32, image.height() as f32),
+                texture_bind_group,
+            ),
+        );
+        key
     }
-    pub fn resize(&mut self, width: u32, height: u32) {
-        log::info!("resize to ({},{})", width, height);
-        self.config.width = width;
-        self.config.height = height;
-        self.surface.configure(&self.device, &self.config);
-    }
-    pub fn render(&mut self, camera: &Camera2D, sprite: &Sprite) {
+    pub fn render(&mut self, camera: &Camera2D, sprites: &[Sprite]) {
         let frame = self
             .surface
             .get_current_texture()
@@ -550,39 +591,48 @@ impl Render {
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
 
-        let sprite_instance = SpriteInstance::from(
-            &sprite.calculate_transform(),
-            &sprite.calculate_uv_offset_scale(),
-        );
-        // let sprite_instances = vec![sprite_instance];
-        // let sprite_instance_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-        //     label: Some("Vertex Buffer"),
-        //     size: size_of::<SpriteInstance>() as wgpu::BufferAddress,
-        //     usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::VERTEX,
-        //     mapped_at_creation: false,
-        // });
-        // let bytes: &[u8] = bytemuck::must_cast_slice(&sprite_instances);
-        // self.queue
-        //     .write_buffer(&sprite_instance_buffer, 0, &bytes[0..]);
+        struct RenderItem {
+            vertex_buffer: wgpu::Buffer,
+            index_buffer: wgpu::Buffer,
+            texture_id: u32,
+            sort_key: f32,
+        }
 
-        let vertex_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(&[sprite_instance]),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-        let index_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Index Buffer"),
-                // NOTE 注意渲染结果一直有问题的原因在，这里的 index 数据的数据类型，是需要跟
-                //  render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-                //  时的 IndexFormat 保持一直的，之前 IndexFormat 定义是 Uint16 但是这里给的 index 数据并没有指定类型
-                //  默认情况下是 i32 类型的，就出现了隐式数据对齐问题，指定 u16 就没有问题了
-                contents: bytemuck::cast_slice(&[2_u32, 0, 1, 1, 3, 2]),
-                usage: wgpu::BufferUsages::INDEX,
-            });
+        let mut render_items = sprites
+            .into_iter()
+            .filter_map(|sprite| {
+                if let Some((image_size, _)) = self.textures.get(&sprite.texture_id) {
+                    let sprite_instance = SpriteInstance::from(
+                        &sprite.calculate_transform(*image_size),
+                        &sprite.calculate_uv_offset_scale(*image_size),
+                    );
+                    let vertex_buffer =
+                        self.device
+                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                label: Some("Vertex Buffer"),
+                                contents: bytemuck::cast_slice(&[sprite_instance]),
+                                usage: wgpu::BufferUsages::VERTEX,
+                            });
+                    let index_buffer =
+                        self.device
+                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                label: Some("Index Buffer"),
+                                contents: bytemuck::cast_slice(&[2_u32, 0, 1, 1, 3, 2]),
+                                usage: wgpu::BufferUsages::INDEX,
+                            });
+                    Some(RenderItem {
+                        vertex_buffer,
+                        index_buffer,
+                        texture_id: sprite.texture_id,
+                        sort_key: sprite.transform.translation.z,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        radsort::sort_by_key(&mut render_items, |item| item.sort_key);
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -601,11 +651,19 @@ impl Render {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &view_uniform_bind_group, &[]);
-            render_pass.set_bind_group(1, &self.texture_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-            render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-            render_pass.draw_indexed(0..6_u32, 0, 0..1);
+
+            for render_item in render_items {
+                if let Some((_, texture)) = self.textures.get(&render_item.texture_id) {
+                    render_pass.set_bind_group(0, &view_uniform_bind_group, &[]);
+                    render_pass.set_bind_group(1, texture, &[]);
+                    render_pass.set_vertex_buffer(0, render_item.vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(
+                        render_item.index_buffer.slice(..),
+                        wgpu::IndexFormat::Uint32,
+                    );
+                    render_pass.draw_indexed(0..6_u32, 0, 0..1);
+                }
+            }
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
