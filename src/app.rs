@@ -99,6 +99,32 @@ impl<T: App> AppHandler<T> {
     fn config_window(&mut self) {
         let window = self.window.as_mut().unwrap();
         window.set_title(self.title);
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            use winit::platform::web::WindowExtWebSys;
+
+            let canvas = window.canvas().unwrap();
+
+            // 将 canvas 添加到当前网页中
+            web_sys::window()
+                .and_then(|win| win.document())
+                .map(|doc| {
+                    doc.body().map(|body| body.append_child(canvas.as_ref()));
+                })
+                .expect("无法将 canvas 添加到当前网页中");
+
+            // 确保画布可以获得焦点
+            // https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/tabindex
+            canvas.set_tab_index(0);
+
+            // 设置画布获得焦点时不显示高亮轮廓
+            let style = canvas.style();
+            style.set_property("outline", "none").unwrap();
+            style.set_property("width", "800px").unwrap();
+            style.set_property("height", "600px").unwrap();
+            canvas.focus().expect("画布无法获取焦点");
+        }
     }
 
     /// 在提交渲染之前通知窗口系统。
@@ -129,8 +155,32 @@ impl<T: App + 'static> ApplicationHandler for AppHandler<T> {
         self.window = Some(window.clone());
         self.config_window();
 
-        let app = pollster::block_on(T::new(window));
-        self.app.lock().replace(app);
+        #[cfg(target_arch = "wasm32")]
+        {
+            let app = self.app.clone();
+            let missed_resize = self.missed_resize.clone();
+            let missed_request_redraw = self.missed_request_redraw.clone();
+
+            wasm_bindgen_futures::spawn_local(async move {
+                let window_cloned = window.clone();
+
+                let mut app = app.lock();
+                *app = Some(T::new(window).await);
+
+                if let Some(resize) = *missed_resize.lock() {
+                    app.as_mut().unwrap().set_window_resized(resize);
+                }
+
+                if *missed_request_redraw.lock() {
+                    window_cloned.request_redraw();
+                }
+            });
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let app = pollster::block_on(T::new(window));
+            self.app.lock().replace(app);
+        }
     }
 
     fn window_event(
@@ -171,6 +221,13 @@ impl<T: App + 'static> ApplicationHandler for AppHandler<T> {
                 } else {
                     log::info!("Window resized: {:?}", physical_size);
                 }
+                // web 的 surface 最大只支持 2048*2048
+                #[cfg(target_arch = "wasm32")]
+                let physical_size = PhysicalSize::new(
+                    physical_size.width.min(2048),
+                    physical_size.height.min(2048),
+                );
+                log::info!("Window resized(fixed): {:?}", physical_size);
 
                 app.set_window_resized(physical_size);
             }
@@ -217,13 +274,31 @@ impl<T: App + 'static> ApplicationHandler for AppHandler<T> {
 }
 
 fn init_logger() {
-    // parse_default_env 会读取 RUST_LOG 环境变量，并在这些默认过滤器之上应用它。
-    env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
-        .filter_module(crate::PKG_NAME, log::LevelFilter::Warn)
-        .filter_module("wgpu_core", log::LevelFilter::Info)
-        .filter_module("wgpu_hal", log::LevelFilter::Error)
-        .filter_module("naga", log::LevelFilter::Error)
-        .parse_default_env()
-        .init();
+    #[cfg(target_arch = "wasm32")]
+    {
+        // 在 web 上，我们使用 fern，因为 console_log 没有按模块级别过滤功能。
+        fern::Dispatch::new()
+            .level(log::LevelFilter::Info)
+            .level_for(crate::PKG_NAME, log::LevelFilter::Warn)
+            .level_for("wgpu_core", log::LevelFilter::Info)
+            .level_for("wgpu_hal", log::LevelFilter::Error)
+            .level_for("naga", log::LevelFilter::Error)
+            .chain(fern::Output::call(console_log::log))
+            .apply()
+            .unwrap();
+        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        // parse_default_env 会读取 RUST_LOG 环境变量，并在这些默认过滤器之上应用它。
+        env_logger::builder()
+            .filter_level(log::LevelFilter::Info)
+            .filter_module(crate::PKG_NAME, log::LevelFilter::Warn)
+            .filter_module("wgpu_core", log::LevelFilter::Info)
+            .filter_module("wgpu_hal", log::LevelFilter::Error)
+            .filter_module("naga", log::LevelFilter::Error)
+            .parse_default_env()
+            .init();
+    }
 }

@@ -3,22 +3,43 @@ name = "webgpu-demo"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+name = "webgpu_demo_lib"
+
 [dependencies]
 winit = "0.30.10"
-wgpu = "25.0.0"
-pollster = "0.4.0"
 parking_lot = "0.12"
-env_logger = "0.11.8"
 log = "0.4"
 bytemuck = { version = "1.12", features = ["derive"] }
 glam = { version = "0.30.3", features = ["bytemuck"] }
 radsort = "0.1.1"
-instant = "0.1.13"
 
 [dependencies.image]
 version = "0.25.6"
 default-features = false
 features = ["png"]
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+wgpu = { version = "25.0.0" }
+pollster = "0.4.0"
+env_logger = "0.11.8"
+instant = { version = "0.1.13", features = ["now"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wgpu = { version = "25.0.0", features = ["webgl"] }
+instant = { version = "0.1.13", features = ["now", "wasm-bindgen"] }
+console_error_panic_hook = "0.1.7"
+console_log = "1.0"
+fern = "0.7"
+wasm-bindgen = "0.2.100"
+wasm-bindgen-futures = "0.4.50"
+web-sys = { version = "0.3.77", features = [
+    "Document",
+    "Window",
+    "Element",
+    "HtmlCanvasElement",
+] }
 
 [profile.release]
 opt-level = 3
@@ -26,3 +47,13 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+
+[profile.wasm-release]
+inherits = "release"
+# opt-level = 's' # 10-30% smaller wasm compared to `opt-level = 3`
+# opt-level = 1 # very slow and big wasm. Don't do this.
+opt-level = 2 # fast and small wasm, basically same as `opt-level = 's'`
+# opt-level = 3 # unecessarily large wasm for no performance gain
+lto = "fat"
+# lto = true # VERY slightly smaller wasm
+# debug = true # include debug symbols, useful when profiling wasm
