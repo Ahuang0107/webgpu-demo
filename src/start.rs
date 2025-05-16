@@ -4,7 +4,9 @@ use std::sync::Arc;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 use wgpu::SurfaceError;
-use winit::dpi::PhysicalSize;
+use winit::dpi::{PhysicalPosition, PhysicalSize};
+use winit::event::KeyEvent;
+use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::Window;
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
@@ -78,6 +80,32 @@ impl App for AppData {
 
     fn get_size(&self) -> PhysicalSize<u32> {
         PhysicalSize::new(self.render.config.width, self.render.config.height)
+    }
+
+    fn keyboard_input(&mut self, event: &KeyEvent) -> bool {
+        if let PhysicalKey::Code(key_code) = event.physical_key {
+            let camera = &mut self.camera;
+            match key_code {
+                KeyCode::ArrowLeft => {
+                    camera.transform.translation.x -= 1.0;
+                }
+                KeyCode::ArrowRight => {
+                    camera.transform.translation.x += 1.0;
+                }
+                KeyCode::ArrowUp => {
+                    camera.transform.translation.y += 1.0;
+                }
+                KeyCode::ArrowDown => {
+                    camera.transform.translation.y -= 1.0;
+                }
+                _ => {}
+            }
+        }
+        false
+    }
+
+    fn cursor_move(&mut self, _position: PhysicalPosition<f64>) -> bool {
+        false
     }
 
     fn render(&mut self) -> Result<(), SurfaceError> {
