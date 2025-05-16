@@ -20,3 +20,7 @@ cargo build --profile wasm-release --target wasm32-unknown-unknown
 wasm-bindgen --no-typescript --target web --out-dir dist --out-name webgpu_demo_lib target/wasm32-unknown-unknown/wasm-release/webgpu_demo_lib.wasm
 http-server -p 8080
 ```
+
+## Tracy Profiler
+
+性能分析工具，需要打开 Tracy Profiler 然后运行程序，再 Tracy Profiler 客户端点击 Connect 连接到程序抓取每帧运行数据

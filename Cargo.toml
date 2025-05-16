@@ -14,6 +14,7 @@ log = "0.4"
 bytemuck = { version = "1.12", features = ["derive"] }
 glam = { version = "0.30.3", features = ["bytemuck"] }
 radsort = "0.1.1"
+profiling = { version = "1.0.16", features = ["profile-with-tracy"], optional = true }
 
 [dependencies.image]
 version = "0.25.6"

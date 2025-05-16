@@ -37,12 +37,14 @@ impl Render {
             backends: wgpu::Backends::PRIMARY,
             #[cfg(target_arch = "wasm32")]
             backends: wgpu::Backends::GL,
+            #[cfg(feature = "profiling")]
+            flags: wgpu::InstanceFlags::DEBUG,
             ..Default::default()
         });
         let surface = instance.create_surface(window.clone())?;
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
+                power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
@@ -68,7 +70,7 @@ impl Render {
             format: TEXTURE_FORMAT,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Fifo,
+            present_mode: wgpu::PresentMode::AutoNoVsync,
             desired_maximum_frame_latency: 2,
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
             view_formats: vec![],
@@ -239,6 +241,8 @@ impl Render {
         key
     }
     pub fn render(&mut self, camera: &Camera2D, sprites: &[Sprite]) {
+        #[cfg(feature = "profiling")]
+        profiling::scope!("Create Frame View");
         let frame = self
             .surface
             .get_current_texture()
@@ -247,6 +251,8 @@ impl Render {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
+        #[cfg(feature = "profiling")]
+        profiling::scope!("Create ViewUniform Bind Group");
         let view_uniform = camera.get_view_uniform();
         let view_uniform_buffer =
             self.device
@@ -264,9 +270,13 @@ impl Render {
             label: None,
         });
 
+        #[cfg(feature = "profiling")]
+        profiling::scope!("Create Command Encoder");
         let mut encoder = self
             .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder (Tracy)"),
+            });
 
         struct RenderItem {
             vertex_buffer: wgpu::Buffer,
@@ -275,6 +285,8 @@ impl Render {
             sort_key: f32,
         }
 
+        #[cfg(feature = "profiling")]
+        profiling::scope!("Convert Sprites");
         let mut render_items = sprites
             .into_iter()
             .filter_map(|sprite| {
@@ -309,9 +321,13 @@ impl Render {
             })
             .collect::<Vec<_>>();
 
+        #[cfg(feature = "profiling")]
+        profiling::scope!("Sort Render Items");
         radsort::sort_by_key(&mut render_items, |item| item.sort_key);
 
         {
+            #[cfg(feature = "profiling")]
+            profiling::scope!("Begin Render Pass");
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -329,6 +345,8 @@ impl Render {
 
             render_pass.set_pipeline(&self.render_pipeline);
 
+            #[cfg(feature = "profiling")]
+            profiling::scope!("Draw Items");
             for render_item in render_items {
                 if let Some((_, texture)) = self.textures.get(&render_item.texture_id) {
                     render_pass.set_bind_group(0, &view_uniform_bind_group, &[]);
@@ -343,6 +361,8 @@ impl Render {
             }
         }
 
+        #[cfg(feature = "profiling")]
+        profiling::scope!("Submit Commands");
         self.queue.submit(std::iter::once(encoder.finish()));
 
         frame.present();

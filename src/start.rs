@@ -1,4 +1,4 @@
-use crate::{run, App, Camera2D, Rect, Render, Sprite, Transform, PKG_NAME};
+use crate::{run, App, Camera2D, Fps, Rect, Render, Sprite, Transform, PKG_NAME};
 use glam::{Vec2, Vec3};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -21,6 +21,7 @@ struct AppData {
     sprites: Vec<Sprite>,
     size: PhysicalSize<u32>,
     if_size_changed: bool,
+    fps: Fps,
 }
 
 impl App for AppData {
@@ -87,6 +88,7 @@ impl App for AppData {
             size: window.inner_size(),
             // 默认为 true 确保渲染第一帧前会调整 surface 大小
             if_size_changed: true,
+            fps: Fps::new(),
         }
     }
 
@@ -126,16 +128,26 @@ impl App for AppData {
     }
 
     fn render(&mut self) -> Result<(), SurfaceError> {
+        #[cfg(feature = "profiling")]
+        profiling::scope!("Render Frame");
         if self.if_size_changed {
             self.camera.viewport_size = (self.size.width as f32, self.size.height as f32).into();
+            // NOTE 之前把 surface_configure 放在这里，发现缩放窗口时会卡顿，于是就移到了外面，每帧都重新 surface_configure
+            //  但是后来发现有性能问题，帧率一直很低，只有 200-300 FPS，远低于 bevy 的性能
+            //  于是用 Tracy Profiler 测试了一下，发现每帧大部分时间都花在了 surface_configure 上（3ms左右）
+            //  现在将 surface_configure 移回这里，性能大大增高，能到 4000 FPS，同时，也没有发现缩放窗口卡顿的问题
+            //  虽然不知道之前缩放窗口卡顿的问题是为什么，但先这样吧
+            self.render.resize(self.size.width, self.size.height);
             self.if_size_changed = false;
         }
-        // TODO 暂时不清楚为什么，必须要每一帧都调整 surface 大小，才能保证调整窗口尺寸时是丝滑的，否则就会很卡顿
-        self.render.resize(self.size.width, self.size.height);
+
         // 窗口最小化时只更新数据不渲染画面
         if self.size.width > 0 && self.size.height > 0 {
             self.render.render(&self.camera, self.sprites.as_slice());
         }
+        self.fps.update();
+        #[cfg(feature = "profiling")]
+        profiling::finish_frame!();
 
         Ok(())
     }

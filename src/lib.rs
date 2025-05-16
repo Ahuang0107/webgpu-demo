@@ -1,8 +1,10 @@
 mod app;
+mod fps;
 mod render;
 mod start;
 
 pub use app::*;
+pub use fps::*;
 pub use render::*;
 pub use start::*;
 
