@@ -16,6 +16,8 @@ struct AppData {
     render: Render,
     camera: Camera2D,
     sprites: Vec<Sprite>,
+    size: PhysicalSize<u32>,
+    if_size_changed: bool,
 }
 
 impl App for AppData {
@@ -63,12 +65,15 @@ impl App for AppData {
             render,
             camera,
             sprites,
+            size: window.inner_size(),
+            // 默认为 true 确保渲染第一帧前会调整 surface 大小
+            if_size_changed: true,
         }
     }
 
     fn set_window_resized(&mut self, new_size: PhysicalSize<u32>) {
-        self.render.resize(new_size.width, new_size.height);
-        self.camera.viewport_size = (new_size.width as f32, new_size.height as f32).into();
+        self.size = new_size;
+        self.if_size_changed = true;
     }
 
     fn get_size(&self) -> PhysicalSize<u32> {
@@ -76,8 +81,14 @@ impl App for AppData {
     }
 
     fn render(&mut self) -> Result<(), SurfaceError> {
+        if self.if_size_changed {
+            self.camera.viewport_size = (self.size.width as f32, self.size.height as f32).into();
+            self.if_size_changed = false;
+        }
+        // TODO 暂时不清楚为什么，必须要每一帧都调整 surface 大小，才能保证调整窗口尺寸时是丝滑的，否则就会很卡顿
+        self.render.resize(self.size.width, self.size.height);
         // 窗口最小化时只更新数据不渲染画面
-        if self.camera.viewport_size.x > 0.0 && self.camera.viewport_size.y > 0.0 {
+        if self.size.width > 0 && self.size.height > 0 {
             self.render.render(&self.camera, self.sprites.as_slice());
         }
 

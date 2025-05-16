@@ -5,7 +5,7 @@ use wgpu::util::DeviceExt;
 pub const TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 pub struct Render {
-    surface: wgpu::Surface<'static>,
+    pub surface: wgpu::Surface<'static>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
@@ -380,7 +380,6 @@ impl Render {
         })
     }
     pub fn resize(&mut self, width: u32, height: u32) {
-        log::info!("resize to ({},{})", width, height);
         self.config.width = width;
         self.config.height = height;
         if self.config.width > 0 && self.config.height > 0 {
