@@ -1,6 +1,7 @@
 use crate::{Rect, Transform};
 use glam::{Affine3A, Quat, Vec2, Vec4};
 
+#[derive(Copy, Clone, Debug, Default)]
 pub struct Sprite {
     pub transform: Transform,
     pub texture_id: u32,

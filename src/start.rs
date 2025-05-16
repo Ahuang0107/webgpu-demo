@@ -1,5 +1,6 @@
-use crate::{run, App, Camera2D, Render, Sprite, Transform, PKG_NAME};
-use glam::{Quat, Vec2, Vec3};
+use crate::{run, App, Camera2D, Rect, Render, Sprite, Transform, PKG_NAME};
+use glam::{Vec2, Vec3};
+use std::collections::HashMap;
 use std::sync::Arc;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -34,32 +35,48 @@ impl App for AppData {
         ));
         let example_1 = render.load_texture(include_bytes!("example.png"));
         let example_2 = render.load_texture(include_bytes!("example2.png"));
+        // TODO 当窗口尺寸为奇数时，会因为浮点数精度问题，导致渲染出来的 sprite slice不完整
+        let font = render.load_texture(include_bytes!("monogram-bitmap.png"));
+        let font_map: HashMap<char, Rect> = HashMap::from([
+            ('0', Rect::new(0.0, 12.0, 6.0, 24.0)),
+            ('1', Rect::new(6.0, 12.0, 12.0, 24.0)),
+            ('2', Rect::new(12.0, 12.0, 18.0, 24.0)),
+            ('3', Rect::new(18.0, 12.0, 24.0, 24.0)),
+            ('4', Rect::new(24.0, 12.0, 30.0, 24.0)),
+            ('5', Rect::new(30.0, 12.0, 36.0, 24.0)),
+            ('6', Rect::new(36.0, 12.0, 42.0, 24.0)),
+            ('7', Rect::new(42.0, 12.0, 48.0, 24.0)),
+            ('8', Rect::new(48.0, 12.0, 54.0, 24.0)),
+            ('9', Rect::new(54.0, 12.0, 60.0, 24.0)),
+        ]);
         let sprites = vec![
             Sprite {
-                transform: Transform {
-                    translation: Vec3::new(150.0, 100.0, 1.0),
-                    rotation: Quat::IDENTITY,
-                    scale: Vec3::ONE,
-                },
+                transform: Transform::from_translation(Vec3::new(150.0, 100.0, 1.0)),
                 texture_id: example_1,
-                rect: None,
-                custom_size: None,
-                flip_x: false,
-                flip_y: false,
-                anchor: Vec2::ZERO,
+                ..Default::default()
             },
             Sprite {
-                transform: Transform {
-                    translation: Vec3::new(-200.0, -100.0, 0.0),
-                    rotation: Quat::IDENTITY,
-                    scale: Vec3::ONE,
-                },
+                transform: Transform::from_translation(Vec3::new(-200.0, -100.0, 0.0)),
                 texture_id: example_2,
-                rect: None,
-                custom_size: None,
-                flip_x: false,
-                flip_y: false,
-                anchor: Vec2::ZERO,
+                ..Default::default()
+            },
+            Sprite {
+                transform: Transform::from_translation(Vec3::new(0.0, 0.0, 100.0)),
+                texture_id: font,
+                rect: Some(font_map.get(&'5').unwrap().clone()),
+                ..Default::default()
+            },
+            Sprite {
+                transform: Transform::from_translation(Vec3::new(6.0, 0.0, 100.0)),
+                texture_id: font,
+                rect: Some(font_map.get(&'2').unwrap().clone()),
+                ..Default::default()
+            },
+            Sprite {
+                transform: Transform::from_translation(Vec3::new(12.0, 0.0, 100.0)),
+                texture_id: font,
+                rect: Some(font_map.get(&'0').unwrap().clone()),
+                ..Default::default()
             },
         ];
 

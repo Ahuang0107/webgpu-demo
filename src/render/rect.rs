@@ -1,6 +1,6 @@
 use glam::Vec2;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Default)]
 pub struct Rect {
     pub min: Vec2,
     pub max: Vec2,

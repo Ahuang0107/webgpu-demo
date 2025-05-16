@@ -1,5 +1,6 @@
 use glam::{Affine3A, Mat4, Quat, Vec3};
 
+#[derive(Copy, Clone, Debug)]
 pub struct Transform {
     /// Position of the entity. In 2d, the last value of the `Vec3` is used for z-ordering.
     pub translation: Vec3,
@@ -17,6 +18,14 @@ impl Transform {
         scale: Vec3::ONE,
     };
 
+    #[inline]
+    pub fn from_translation(translation: Vec3) -> Self {
+        Self {
+            translation,
+            ..Default::default()
+        }
+    }
+
     /// Returns the 3d affine transformation matrix from this transforms translation,
     /// rotation, and scale.
     #[inline]
@@ -29,5 +38,12 @@ impl Transform {
     #[inline]
     pub fn compute_affine(&self) -> Affine3A {
         Affine3A::from_scale_rotation_translation(self.scale, self.rotation, self.translation)
+    }
+}
+
+impl Default for Transform {
+    #[inline]
+    fn default() -> Self {
+        Transform::IDENTITY
     }
 }
