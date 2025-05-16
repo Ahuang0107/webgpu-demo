@@ -1,4 +1,16 @@
-use glam::{Affine3A, Mat4, Quat, Vec2, Vec3, Vec4};
+mod camera;
+mod rect;
+mod sprite;
+mod sprite_instance;
+mod transform;
+
+pub use camera::*;
+pub use rect::*;
+pub use sprite::*;
+pub use sprite_instance::*;
+pub use transform::*;
+
+use glam::Vec2;
 use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
@@ -13,235 +25,6 @@ pub struct Render {
     texture_bind_group_layout: wgpu::BindGroupLayout,
     render_pipeline: wgpu::RenderPipeline,
     textures: HashMap<u32, (Vec2, wgpu::BindGroup)>,
-}
-
-pub struct Camera2D {
-    /// Specifies the origin of the viewport as a normalized position from 0 to 1, where (0, 0) is the bottom left
-    /// and (1, 1) is the top right. This determines where the camera's position sits inside the viewport.
-    ///
-    /// When the projection scales due to viewport resizing, the position of the camera, and thereby `viewport_origin`,
-    /// remains at the same relative point.
-    ///
-    /// Consequently, this is pivot point when scaling. With a bottom left pivot, the projection will expand
-    /// upwards and to the right. With a top right pivot, the projection will expand downwards and to the left.
-    /// Values in between will caused the projection to scale proportionally on each axis.
-    ///
-    /// Defaults to `(0.5, 0.5)`, which makes scaling affect opposite sides equally, keeping the center
-    /// point of the viewport centered.
-    ///
-    /// 来自 bevy 的 OrthographicProjection 中的 viewport_origin
-    pub viewport_origin: Vec2,
-    pub viewport_size: Vec2,
-    pub transform: Transform,
-    /// sprite 的 z 越大，表示约 near（靠近镜头）
-    pub near: f32,
-    pub far: f32,
-}
-
-impl Camera2D {
-    #[inline(always)]
-    pub fn new(viewport_size: Vec2) -> Camera2D {
-        Camera2D {
-            viewport_origin: Vec2::splat(0.5),
-            viewport_size,
-            transform: Transform::IDENTITY,
-            near: -1000.0,
-            far: 1.0,
-        }
-    }
-
-    #[inline(always)]
-    fn area(&self) -> Rect {
-        let origin_x = self.viewport_size.x * self.viewport_origin.x;
-        let origin_y = self.viewport_size.y * self.viewport_origin.y;
-
-        Rect::new(
-            -origin_x,
-            -origin_y,
-            self.viewport_size.x - origin_x,
-            self.viewport_size.y - origin_y,
-        )
-    }
-
-    #[inline(always)]
-    fn get_clip_from_view(&self) -> Mat4 {
-        let area = self.area();
-        Mat4::orthographic_rh(
-            area.min.x, area.max.x, area.min.y, area.max.y, self.near, self.far,
-        )
-    }
-
-    #[inline(always)]
-    fn get_world_from_view(&self) -> Mat4 {
-        self.transform.compute_matrix()
-    }
-
-    #[inline(always)]
-    fn get_view_from_world(&self) -> Mat4 {
-        self.get_world_from_view().inverse()
-    }
-
-    #[inline(always)]
-    pub fn get_clip_from_world(&self) -> Mat4 {
-        self.get_clip_from_view() * self.get_view_from_world()
-    }
-}
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct ViewUniform {
-    clip_from_world: Mat4,
-    /// viewport_origin(default = `[0.5, 0.5]`) + viewport_size(default = window_size)
-    viewport: Vec4,
-}
-
-pub struct Sprite {
-    pub transform: Transform,
-    pub texture_id: u32,
-    /// Select an area of the texture
-    pub rect: Option<Rect>,
-    /// Change the on-screen size of the sprite
-    pub custom_size: Option<Vec2>,
-    pub flip_x: bool,
-    pub flip_y: bool,
-    pub anchor: Vec2,
-}
-
-pub struct Transform {
-    /// Position of the entity. In 2d, the last value of the `Vec3` is used for z-ordering.
-    pub translation: Vec3,
-    /// Rotation of the entity.
-    pub rotation: Quat,
-    /// Scale of the entity.
-    pub scale: Vec3,
-}
-
-impl Transform {
-    /// An identity [`Transform`] with no translation, rotation, and a scale of 1 on all axes.
-    pub const IDENTITY: Self = Transform {
-        translation: Vec3::ZERO,
-        rotation: Quat::IDENTITY,
-        scale: Vec3::ONE,
-    };
-
-    /// Returns the 3d affine transformation matrix from this transforms translation,
-    /// rotation, and scale.
-    #[inline]
-    pub fn compute_matrix(&self) -> Mat4 {
-        Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.translation)
-    }
-
-    /// Returns the 3d affine transformation matrix from this transforms translation,
-    /// rotation, and scale.
-    #[inline]
-    pub fn compute_affine(&self) -> Affine3A {
-        Affine3A::from_scale_rotation_translation(self.scale, self.rotation, self.translation)
-    }
-}
-
-impl Sprite {
-    #[inline(always)]
-    pub fn calculate_transform(&self, image_size: Vec2) -> Affine3A {
-        let quad_size = self
-            .custom_size
-            .unwrap_or_else(|| self.rect.map(|r| r.size()).unwrap_or(image_size));
-
-        self.transform.compute_affine()
-            * Affine3A::from_scale_rotation_translation(
-                quad_size.extend(1.0),
-                Quat::IDENTITY,
-                (quad_size * (-self.anchor - Vec2::splat(0.5))).extend(0.0),
-            )
-    }
-    #[inline(always)]
-    pub fn calculate_uv_offset_scale(&self, image_size: Vec2) -> Vec4 {
-        let mut uv_offset_scale: Vec4;
-
-        // If a rect is specified, adjust UVs and the size of the quad
-        if let Some(rect) = self.rect {
-            let rect_size = rect.size();
-            uv_offset_scale = Vec4::new(
-                rect.min.x / image_size.x,
-                rect.max.y / image_size.y,
-                rect_size.x / image_size.x,
-                -rect_size.y / image_size.y,
-            );
-        } else {
-            uv_offset_scale = Vec4::new(0.0, 1.0, 1.0, -1.0);
-        }
-
-        if self.flip_x {
-            uv_offset_scale.x += uv_offset_scale.z;
-            uv_offset_scale.z *= -1.0;
-        }
-        if self.flip_y {
-            uv_offset_scale.y += uv_offset_scale.w;
-            uv_offset_scale.w *= -1.0;
-        }
-
-        uv_offset_scale
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct Rect {
-    pub min: Vec2,
-    pub max: Vec2,
-}
-
-impl Rect {
-    #[inline]
-    pub fn from_corners(p0: Vec2, p1: Vec2) -> Self {
-        Self {
-            min: p0.min(p1),
-            max: p0.max(p1),
-        }
-    }
-    #[inline]
-    pub fn new(x0: f32, y0: f32, x1: f32, y1: f32) -> Self {
-        Self::from_corners(Vec2::new(x0, y0), Vec2::new(x1, y1))
-    }
-
-    #[inline]
-    pub fn size(&self) -> Vec2 {
-        self.max - self.min
-    }
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct SpriteInstance {
-    // Affine 4x3 transposed to 3x4
-    pub i_model_transpose: [Vec4; 3],
-    pub i_uv_offset_scale: [f32; 4],
-}
-
-impl SpriteInstance {
-    const ATTRIBUTES: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![
-        0 => Float32x4,
-        1 => Float32x4,
-        2 => Float32x4,
-        3 => Float32x4,
-    ];
-    pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
-        wgpu::VertexBufferLayout {
-            array_stride: size_of::<Self>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Instance,
-            attributes: &Self::ATTRIBUTES,
-        }
-    }
-    #[inline]
-    fn from(transform: &Affine3A, uv_offset_scale: &Vec4) -> Self {
-        let transpose_model_3x3 = transform.matrix3.transpose();
-        Self {
-            i_model_transpose: [
-                transpose_model_3x3.x_axis.extend(transform.translation.x),
-                transpose_model_3x3.y_axis.extend(transform.translation.y),
-                transpose_model_3x3.z_axis.extend(transform.translation.z),
-            ],
-            i_uv_offset_scale: uv_offset_scale.to_array(),
-        }
-    }
 }
 
 impl Render {
@@ -464,16 +247,7 @@ impl Render {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let clip_from_world = camera.get_clip_from_world();
-        let view_uniform = ViewUniform {
-            clip_from_world,
-            viewport: Vec4::new(
-                camera.viewport_origin.x,
-                camera.viewport_origin.y,
-                camera.viewport_size.x,
-                camera.viewport_size.y,
-            ),
-        };
+        let view_uniform = camera.get_view_uniform();
         let view_uniform_buffer =
             self.device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
