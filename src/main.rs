@@ -1,103 +1,86 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use glam::{Quat, Vec2, Vec3};
-use webgpu_demo::{Camera2D, Render, Sprite, Transform};
-use winit::keyboard::{KeyCode, PhysicalKey};
+use std::sync::Arc;
+use webgpu_demo::*;
+use wgpu::SurfaceError;
+use winit::dpi::PhysicalSize;
+use winit::window::Window;
 
-fn main() {
-    env_logger::Builder::from_env(
-        env_logger::Env::default().default_filter_or("webgpu_demo=trace"),
-    )
-    .init();
-    pollster::block_on(run()).expect("run failed.");
+fn main() -> Result<(), impl std::error::Error> {
+    println!("{PKG_NAME}");
+    run::<AppData>(PKG_NAME)
 }
 
-async fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let event_loop = winit::event_loop::EventLoop::new()?;
-    let size = winit::dpi::PhysicalSize::new(1920, 1080);
-    let window = winit::window::WindowBuilder::new()
-        .with_inner_size(size)
-        .build(&event_loop)?;
-    let window = std::sync::Arc::new(window);
+struct AppData {
+    render: Render,
+    camera: Camera2D,
+    sprites: Vec<Sprite>,
+}
 
-    let mut render = Render::new(window.clone()).await?;
-    let mut camera = Camera2D::new(Vec2::new(size.width as f32, size.height as f32));
-    let example_1 = render.load_texture(include_bytes!("example.png"));
-    let example_2 = render.load_texture(include_bytes!("example2.png"));
-    let sprites = vec![
-        Sprite {
-            transform: Transform {
-                translation: Vec3::new(150.0, 100.0, 1.0),
-                rotation: Quat::IDENTITY,
-                scale: Vec3::ONE,
+impl App for AppData {
+    async fn new(window: Arc<Window>) -> Self {
+        let mut render = Render::new(window.clone())
+            .await
+            .expect("Failed to create render");
+
+        let camera = Camera2D::new(Vec2::new(
+            window.inner_size().width as f32,
+            window.inner_size().height as f32,
+        ));
+        let example_1 = render.load_texture(include_bytes!("example.png"));
+        let example_2 = render.load_texture(include_bytes!("example2.png"));
+        let sprites = vec![
+            Sprite {
+                transform: Transform {
+                    translation: Vec3::new(150.0, 100.0, 1.0),
+                    rotation: Quat::IDENTITY,
+                    scale: Vec3::ONE,
+                },
+                texture_id: example_1,
+                rect: None,
+                custom_size: None,
+                flip_x: false,
+                flip_y: false,
+                anchor: Vec2::ZERO,
             },
-            texture_id: example_1,
-            rect: None,
-            custom_size: None,
-            flip_x: false,
-            flip_y: false,
-            anchor: Vec2::ZERO,
-        },
-        Sprite {
-            transform: Transform {
-                translation: Vec3::new(-200.0, -100.0, 0.0),
-                rotation: Quat::IDENTITY,
-                scale: Vec3::ONE,
+            Sprite {
+                transform: Transform {
+                    translation: Vec3::new(-200.0, -100.0, 0.0),
+                    rotation: Quat::IDENTITY,
+                    scale: Vec3::ONE,
+                },
+                texture_id: example_2,
+                rect: None,
+                custom_size: None,
+                flip_x: false,
+                flip_y: false,
+                anchor: Vec2::ZERO,
             },
-            texture_id: example_2,
-            rect: None,
-            custom_size: None,
-            flip_x: false,
-            flip_y: false,
-            anchor: Vec2::ZERO,
-        },
-    ];
+        ];
 
-    log::info!("Entering render loop...");
-    let _ = winit::event_loop::EventLoop::run(event_loop, move |event, target| match event {
-        winit::event::Event::WindowEvent { event, .. } => match event {
-            winit::event::WindowEvent::RedrawRequested => {
-                // log::info!("Redraw requested...");
-                render.render(&camera, sprites.as_slice());
-            }
-            winit::event::WindowEvent::CursorMoved { .. } => {
-                window.request_redraw();
-            }
-            winit::event::WindowEvent::KeyboardInput { event, .. } => {
-                if let PhysicalKey::Code(key_code) = event.physical_key {
-                    match key_code {
-                        KeyCode::ArrowLeft => {
-                            camera.transform.translation.x -= 1.0;
-                        }
-                        KeyCode::ArrowRight => {
-                            camera.transform.translation.x += 1.0;
-                        }
-                        KeyCode::ArrowUp => {
-                            camera.transform.translation.y += 1.0;
-                        }
-                        KeyCode::ArrowDown => {
-                            camera.transform.translation.y -= 1.0;
-                        }
-                        _ => {}
-                    }
-                    window.request_redraw();
-                }
-            }
-            winit::event::WindowEvent::Resized(physical_size) => {
-                render.resize(physical_size.width, physical_size.height);
-                window.request_redraw();
-            }
-            winit::event::WindowEvent::CloseRequested => {
-                target.exit();
-            }
-            _ => {}
-        },
-        winit::event::Event::DeviceEvent { event, .. } => match event {
-            winit::event::DeviceEvent::Key(_) => {}
-            _ => {}
-        },
-        _ => {}
-    });
+        Self {
+            render,
+            camera,
+            sprites,
+        }
+    }
 
-    Ok(())
+    fn set_window_resized(&mut self, new_size: PhysicalSize<u32>) {
+        self.render.resize(new_size.width, new_size.height);
+        self.camera.viewport_size = (new_size.width as f32, new_size.height as f32).into();
+    }
+
+    fn get_size(&self) -> PhysicalSize<u32> {
+        PhysicalSize::new(self.render.config.width, self.render.config.height)
+    }
+
+    fn render(&mut self) -> Result<(), SurfaceError> {
+        // 窗口最小化时只更新数据不渲染画面
+        if self.camera.viewport_size.x > 0.0 && self.camera.viewport_size.y > 0.0 {
+            self.render.render(&self.camera, self.sprites.as_slice());
+        }
+
+        Ok(())
+    }
 }

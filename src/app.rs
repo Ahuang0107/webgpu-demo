@@ -1,0 +1,229 @@
+use parking_lot::Mutex;
+use std::future::Future;
+use std::rc::Rc;
+use std::sync::Arc;
+use wgpu::WasmNotSend;
+use winit::application::ApplicationHandler;
+use winit::dpi::{PhysicalPosition, PhysicalSize};
+use winit::event::{
+    DeviceEvent, ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent,
+};
+use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::window::{Window, WindowId};
+
+pub fn run<T: App + 'static>(title: &'static str) -> Result<(), impl std::error::Error> {
+    init_logger();
+
+    let events_loop = EventLoop::new().unwrap();
+    let mut app = AppHandler::<T>::new(title);
+    events_loop.run_app(&mut app)
+}
+
+pub trait App {
+    #[allow(opaque_hidden_inferred_bound)]
+    fn new(window: Arc<Window>) -> impl Future<Output = Self> + WasmNotSend;
+
+    /// 记录窗口大小已发生变化
+    ///
+    /// # NOTE:
+    /// 当缩放浏览器窗口时, 窗口大小会以高于渲染帧率的频率发生变化，
+    /// 如果窗口 size 发生变化就立即调整 surface 大小, 会导致缩放浏览器窗口大小时渲染画面闪烁。
+    fn set_window_resized(&mut self, new_size: PhysicalSize<u32>);
+    /// 获取窗口大小    
+    fn get_size(&self) -> PhysicalSize<u32>;
+
+    /// 键盘事件
+    fn keyboard_input(&mut self, _event: &KeyEvent) -> bool {
+        false
+    }
+
+    fn mouse_click(&mut self, _state: ElementState, _button: MouseButton) -> bool {
+        false
+    }
+
+    fn mouse_wheel(&mut self, _delta: MouseScrollDelta, _phase: TouchPhase) -> bool {
+        false
+    }
+
+    fn cursor_move(&mut self, _position: PhysicalPosition<f64>) -> bool {
+        false
+    }
+
+    /// 鼠标移动/触摸事件
+    fn device_input(&mut self, _event: &DeviceEvent) -> bool {
+        false
+    }
+
+    /// 更新渲染数据
+    fn update(&mut self, _dt: instant::Duration) {}
+
+    /// 提交渲染
+    fn render(&mut self) -> Result<(), wgpu::SurfaceError>;
+}
+
+pub struct AppHandler<T: App> {
+    window: Option<Arc<Window>>,
+    title: &'static str,
+    app: Rc<Mutex<Option<T>>>,
+    /// 错失的窗口大小变化
+    ///
+    /// # NOTE
+    /// 在 web 端，app 的初始化是异步的，当收到 resized 事件时，初始化可能还没有完成从而错过窗口 resized 事件，
+    /// 当 app 初始化完成后会调用 `set_window_resized` 方法来补上错失的窗口大小变化事件。
+    #[allow(dead_code)]
+    missed_resize: Rc<Mutex<Option<PhysicalSize<u32>>>>,
+    /// 错失的请求重绘事件
+    ///
+    /// # NOTE
+    /// 在 web 端，app 的初始化是异步的，当收到 redraw 事件时，初始化可能还没有完成从而错过请求重绘事件，
+    /// 当 app 初始化完成后会调用 `request_redraw` 方法来补上错失的请求重绘事件, 启用 requestAnimationFrame 帧循环。
+    #[allow(dead_code)]
+    missed_request_redraw: Rc<Mutex<bool>>,
+    /// 上次执行渲染的时间
+    last_render_time: instant::Instant,
+}
+
+impl<T: App> AppHandler<T> {
+    pub fn new(title: &'static str) -> AppHandler<T> {
+        AppHandler {
+            title,
+            window: None,
+            app: Rc::new(Mutex::new(None)),
+            missed_resize: Rc::new(Mutex::new(None)),
+            missed_request_redraw: Rc::new(Mutex::new(false)),
+            last_render_time: instant::Instant::now(),
+        }
+    }
+
+    /// 配置窗口
+    fn config_window(&mut self) {
+        let window = self.window.as_mut().unwrap();
+        window.set_title(self.title);
+    }
+
+    /// 在提交渲染之前通知窗口系统。
+    fn pre_present_notify(&self) {
+        if let Some(window) = self.window.as_ref() {
+            window.pre_present_notify();
+        }
+    }
+
+    /// 请求重绘
+    fn request_redraw(&self) {
+        if let Some(window) = self.window.as_ref() {
+            window.request_redraw();
+        }
+    }
+}
+
+impl<T: App + 'static> ApplicationHandler for AppHandler<T> {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        if self.app.as_ref().lock().is_some() {
+            return;
+        }
+
+        self.last_render_time = instant::Instant::now();
+
+        let window_attributes = Window::default_attributes();
+        let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
+        self.window = Some(window.clone());
+        self.config_window();
+
+        let app = pollster::block_on(T::new(window));
+        self.app.lock().replace(app);
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        _window_id: WindowId,
+        event: WindowEvent,
+    ) {
+        let mut app = self.app.lock();
+
+        if app.as_ref().is_none() {
+            // 如果 app 还没有初始化完成，则记录错失的窗口事件
+            match event {
+                WindowEvent::Resized(physical_size) => {
+                    if physical_size.width > 0 && physical_size.height > 0 {
+                        let mut missed_resize = self.missed_resize.lock();
+                        *missed_resize = Some(physical_size);
+                    }
+                }
+                WindowEvent::RedrawRequested => {
+                    let mut missed_request_redraw = self.missed_request_redraw.lock();
+                    *missed_request_redraw = true;
+                }
+                _ => (),
+            }
+            return;
+        }
+
+        let app = app.as_mut().unwrap();
+        match event {
+            WindowEvent::CloseRequested => {
+                event_loop.exit();
+            }
+            WindowEvent::Resized(physical_size) => {
+                if physical_size.width == 0 || physical_size.height == 0 {
+                    // 在 app 内部控制窗口最小化时只更新数据不渲染画面
+                    log::info!("Window minimized!");
+                } else {
+                    log::info!("Window resized: {:?}", physical_size);
+                }
+
+                app.set_window_resized(physical_size);
+            }
+            WindowEvent::KeyboardInput { event, .. } => {
+                // 键盘事件
+                let _ = app.keyboard_input(&event);
+            }
+            WindowEvent::MouseWheel { delta, phase, .. } => {
+                // 鼠标滚轮事件
+                let _ = app.mouse_wheel(delta, phase);
+            }
+            WindowEvent::MouseInput { button, state, .. } => {
+                // 鼠标点击事件
+                let _ = app.mouse_click(state, button);
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                // 鼠标移动事件
+                let _ = app.cursor_move(position);
+            }
+            WindowEvent::RedrawRequested => {
+                // surface 重绘事件
+                let now = instant::Instant::now();
+                let delta = now - self.last_render_time;
+                self.last_render_time = now;
+
+                app.update(delta);
+
+                self.pre_present_notify();
+
+                match app.render() {
+                    Ok(_) => {}
+                    // 当展示平面的上下文丢失，就需重新配置
+                    Err(wgpu::SurfaceError::Lost) => log::error!("Surface is lost"),
+                    // 所有其他错误（过期、超时等）应在下一帧解决
+                    Err(e) => log::error!("{e:?}"),
+                }
+
+                // 除非我们手动请求，RedrawRequested 将只会触发一次。
+                self.request_redraw();
+            }
+            _ => (),
+        }
+    }
+}
+
+fn init_logger() {
+    // parse_default_env 会读取 RUST_LOG 环境变量，并在这些默认过滤器之上应用它。
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Info)
+        .filter_module(crate::PKG_NAME, log::LevelFilter::Warn)
+        .filter_module("wgpu_core", log::LevelFilter::Info)
+        .filter_module("wgpu_hal", log::LevelFilter::Error)
+        .filter_module("naga", log::LevelFilter::Error)
+        .parse_default_env()
+        .init();
+}
