@@ -64,6 +64,11 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    var texture = textureSample(sprite_texture, sprite_sampler, in.uv);
+    if texture.a == 0.0 {
+        discard;
+    }
+
     let kernel: array<f32, 9> = array<f32, 9>(0.075, 0.124, 0.075, 0.124, 0.204, 0.124, 0.075, 0.124, 0.075);
     let offset_x: array<f32, 9> = array<f32, 9>(-2.0, 0.0, 2.0, -2.0, 0.0, 2.0, -2.0, 0.0, 2.0);
     let offset_y: array<f32, 9> = array<f32, 9>(-2.0, -2.0, -2.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0);
