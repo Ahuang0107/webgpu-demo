@@ -1,4 +1,4 @@
-use crate::{Rect, Transform};
+use crate::{BlendMode, Color, Rect, Transform};
 use glam::{Affine3A, Quat, Vec2, Vec4};
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -14,6 +14,8 @@ pub struct Sprite {
     pub anchor: Vec2,
     /// Mask range
     pub mask: Option<[f32; 2]>,
+    pub color: Color,
+    pub blend_mode: BlendMode,
 }
 
 impl Sprite {

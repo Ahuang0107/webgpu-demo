@@ -20,6 +20,9 @@ struct VertexInput {
     @location(1) i_model_transpose_col1: vec4<f32>,
     @location(2) i_model_transpose_col2: vec4<f32>,
     @location(3) i_uv_offset_scale: vec4<f32>,
+    @location(4) color: vec4<f32>,
+    @location(5) blend_mode: u32,
+    @location(6) _padding: vec3<u32>,
 };
 
 struct VertexOutput {
@@ -49,12 +52,12 @@ fn vs_main(
     return out;
 }
 
-@group(1) @binding(0) var texture_t: texture_2d<f32>;
-@group(1) @binding(1) var texture_s: sampler;
+@group(1) @binding(0) var sprite_texture: texture_2d<f32>;
+@group(1) @binding(1) var sprite_sampler: sampler;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let texture = textureSample(texture_t, texture_s, in.uv);
+    let texture = textureSample(sprite_texture, sprite_sampler, in.uv);
     if texture.a == 0.0 {
         discard;
     }

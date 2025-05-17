@@ -20,11 +20,16 @@ struct VertexInput {
     @location(1) i_model_transpose_col1: vec4<f32>,
     @location(2) i_model_transpose_col2: vec4<f32>,
     @location(3) i_uv_offset_scale: vec4<f32>,
+    @location(4) color: vec4<f32>,
+    @location(5) blend_mode: u32,
+    @location(6) _padding: vec3<u32>,
 };
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) uv: vec2<f32>,
+    @location(1) @interpolate(flat) color: vec4<f32>,
+    @location(2) @interpolate(flat) blend_mode: u32,
 };
 
 @vertex
@@ -45,15 +50,16 @@ fn vs_main(
         in.i_model_transpose_col2,
     )) * vec4<f32>(vertex_position, 1.0);
     out.uv = vec2<f32>(vertex_position.xy) * in.i_uv_offset_scale.zw + in.i_uv_offset_scale.xy;
+    out.color = in.color;
 
     return out;
 }
 
-@group(1) @binding(0) var texture_t: texture_2d<f32>;
-@group(1) @binding(1) var texture_s: sampler;
+@group(1) @binding(0) var sprite_texture: texture_2d<f32>;
+@group(1) @binding(1) var sprite_sampler: sampler;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let texture = textureSample(texture_t, texture_s, in.uv);
+    let texture = in.color * textureSample(sprite_texture, sprite_sampler, in.uv);
     return texture;
 }

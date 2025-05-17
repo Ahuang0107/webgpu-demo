@@ -1,4 +1,6 @@
+mod blend_mode;
 mod camera;
+mod color;
 mod pipeline;
 mod rect;
 mod render_item;
@@ -6,7 +8,9 @@ mod sprite;
 mod sprite_instance;
 mod transform;
 
+pub use blend_mode::*;
 pub use camera::*;
+pub use color::*;
 pub use pipeline::*;
 pub use rect::*;
 pub use render_item::*;
@@ -33,6 +37,7 @@ pub struct Render {
     grab_texture: wgpu::Texture,
     grab_texture_bind_group: wgpu::BindGroup,
     render_pipeline: wgpu::RenderPipeline,
+    blend_mode_pipeline: wgpu::RenderPipeline,
     mask_start_pipeline: wgpu::RenderPipeline,
     mask_end_pipeline: wgpu::RenderPipeline,
     textures: HashMap<u32, (Vec2, wgpu::BindGroup)>,
@@ -77,7 +82,7 @@ impl Render {
             .await?;
         let size = window.inner_size();
         let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
             format: TEXTURE_FORMAT,
             width: size.width,
             height: size.height,
@@ -202,6 +207,39 @@ impl Render {
                 bias: wgpu::DepthBiasState::default(),
             }),
         );
+        let blend_mode_shader =
+            device.create_shader_module(wgpu::include_wgsl!("blend_mode_shader.wgsl"));
+        let blend_mode_pipeline = create_pipeline(
+            "Blend Mode Pipeline",
+            &device,
+            &[
+                &view_uniform_bind_group_layout,
+                &texture_bind_group_layout,
+                &texture_bind_group_layout,
+            ],
+            &blend_mode_shader,
+            SpriteInstance::desc(),
+            wgpu::ColorTargetState {
+                format: TEXTURE_FORMAT,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            },
+            Some(wgpu::DepthStencilState {
+                format: MASK_TEXTURE_FORMAT,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::Always,
+                stencil: wgpu::StencilState {
+                    front: wgpu::StencilFaceState {
+                        compare: wgpu::CompareFunction::Equal,
+                        ..Default::default()
+                    },
+                    back: wgpu::StencilFaceState::IGNORE,
+                    read_mask: !0,
+                    write_mask: !0,
+                },
+                bias: wgpu::DepthBiasState::default(),
+            }),
+        );
         let mask_shader = device.create_shader_module(wgpu::include_wgsl!("mask_shader.wgsl"));
         let mask_start_pipeline = create_pipeline(
             "Mask Start Pipeline",
@@ -269,6 +307,7 @@ impl Render {
             grab_texture,
             grab_texture_bind_group,
             render_pipeline,
+            blend_mode_pipeline,
             mask_start_pipeline,
             mask_end_pipeline,
             textures: HashMap::new(),
@@ -454,9 +493,18 @@ impl Render {
                 let sprite_instance = SpriteInstance::from(
                     &sprite.calculate_transform(*image_size),
                     &sprite.calculate_uv_offset_scale(*image_size),
+                    sprite.color,
+                    sprite.blend_mode,
                 );
                 sprite_instances.push(sprite_instance);
-                if let Some([mask_start, mask_end]) = sprite.mask {
+                if sprite.blend_mode != BlendMode::Normal {
+                    render_items.push(RenderItem::Sprite {
+                        range: index..index + 1,
+                        texture_id: sprite.texture_id,
+                        sort_key: sprite.transform.translation.z,
+                        if_blend_mode: true,
+                    });
+                } else if let Some([mask_start, mask_end]) = sprite.mask {
                     render_items.push(RenderItem::SpriteMaskStart {
                         range: index..index + 1,
                         texture_id: sprite.texture_id,
@@ -472,6 +520,7 @@ impl Render {
                         range: index..index + 1,
                         texture_id: sprite.texture_id,
                         sort_key: sprite.transform.translation.z,
+                        if_blend_mode: false,
                     });
                 }
             } else {
@@ -529,8 +578,51 @@ impl Render {
             for render_item in render_items {
                 if let Some((_, texture)) = self.textures.get(&render_item.texture_id()) {
                     match render_item {
-                        RenderItem::Sprite { .. } => {
-                            render_pass.set_pipeline(&self.render_pipeline);
+                        RenderItem::Sprite { if_blend_mode, .. } => {
+                            if if_blend_mode {
+                                drop(render_pass);
+                                encoder.copy_texture_to_texture(
+                                    frame.texture.as_image_copy(),
+                                    self.grab_texture.as_image_copy(),
+                                    wgpu::Extent3d {
+                                        width: self.grab_texture.width(),
+                                        height: self.grab_texture.height(),
+                                        depth_or_array_layers: 1,
+                                    },
+                                );
+                                render_pass =
+                                    encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                                        label: None,
+                                        color_attachments: &[Some(
+                                            wgpu::RenderPassColorAttachment {
+                                                view: &frame_view,
+                                                resolve_target: None,
+                                                ops: wgpu::Operations {
+                                                    load: wgpu::LoadOp::Load,
+                                                    store: wgpu::StoreOp::Store,
+                                                },
+                                            },
+                                        )],
+                                        depth_stencil_attachment: Some(
+                                            wgpu::RenderPassDepthStencilAttachment {
+                                                view: &mask_view,
+                                                depth_ops: None,
+                                                stencil_ops: Some(wgpu::Operations {
+                                                    load: wgpu::LoadOp::Load,
+                                                    store: wgpu::StoreOp::Store,
+                                                }),
+                                            },
+                                        ),
+                                        timestamp_writes: None,
+                                        occlusion_query_set: None,
+                                    });
+                                render_pass.set_stencil_reference(0);
+
+                                render_pass.set_pipeline(&self.blend_mode_pipeline);
+                                render_pass.set_bind_group(2, &self.grab_texture_bind_group, &[]);
+                            } else {
+                                render_pass.set_pipeline(&self.render_pipeline);
+                            }
                         }
                         RenderItem::SpriteMaskStart { .. } => {
                             render_pass.set_pipeline(&self.mask_start_pipeline);

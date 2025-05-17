@@ -1,4 +1,4 @@
-use crate::{run, App, Camera2D, Fps, Rect, Render, Sprite, Transform, PKG_NAME};
+use crate::{run, App, BlendMode, Camera2D, Fps, Rect, Render, Sprite, Transform, PKG_NAME};
 use glam::{Vec2, Vec3};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -22,6 +22,8 @@ struct AppData {
     size: PhysicalSize<u32>,
     if_size_changed: bool,
     fps: Fps,
+    if_mask_follow_cursor: bool,
+    if_blur_follow_cursor: bool,
 }
 
 impl App for AppData {
@@ -38,6 +40,8 @@ impl App for AppData {
         let example_2 = render.load_texture(include_bytes!("example2.png"));
         let example_3 = render.load_texture(include_bytes!("example3.png"));
         let mask_example = render.load_texture(include_bytes!("mask-example.png"));
+        let blend_example = render.load_texture(include_bytes!("blend-example.png"));
+        let blur_example = render.load_texture(include_bytes!("blur-example.png"));
         // TODO 当窗口尺寸为奇数时，会因为浮点数精度问题，导致渲染出来的 sprite slice不完整
         let font = render.load_texture(include_bytes!("monogram-bitmap.png"));
         let font_map: HashMap<char, Rect> = HashMap::from([
@@ -76,6 +80,20 @@ impl App for AppData {
                 mask: Some([1.0, 2.0]),
                 ..Default::default()
             },
+            // soft light 效果
+            Sprite {
+                transform: Transform::from_translation(Vec3::new(0.0, 0.0, 4.0)),
+                texture_id: blend_example,
+                blend_mode: BlendMode::SoftLight,
+                ..Default::default()
+            },
+            // blur 效果
+            Sprite {
+                transform: Transform::from_translation(Vec3::new(0.0, 0.0, 5.0)),
+                texture_id: blur_example,
+                blend_mode: BlendMode::Blur,
+                ..Default::default()
+            },
             // 裁切显示
             Sprite {
                 transform: Transform::from_translation(Vec3::new(0.0, 0.0, 100.0)),
@@ -105,6 +123,8 @@ impl App for AppData {
             // 默认为 true 确保渲染第一帧前会调整 surface 大小
             if_size_changed: true,
             fps: Fps::new(),
+            if_mask_follow_cursor: false,
+            if_blur_follow_cursor: false,
         }
     }
 
@@ -133,6 +153,18 @@ impl App for AppData {
                 KeyCode::ArrowDown => {
                     camera.transform.translation.y -= 1.0;
                 }
+                KeyCode::Digit0 => {
+                    self.if_mask_follow_cursor = false;
+                    self.if_blur_follow_cursor = false;
+                }
+                KeyCode::Digit1 => {
+                    self.if_mask_follow_cursor = true;
+                    self.if_blur_follow_cursor = false;
+                }
+                KeyCode::Digit2 => {
+                    self.if_mask_follow_cursor = false;
+                    self.if_blur_follow_cursor = true;
+                }
                 _ => {}
             }
         }
@@ -144,10 +176,19 @@ impl App for AppData {
             .camera
             .viewport_to_world(Vec2::new(position.x as f32, position.y as f32))
             .truncate();
-        for sprite in self.sprites.iter_mut() {
-            if sprite.texture_id == 3 {
-                sprite.transform.translation.x = world_position.x;
-                sprite.transform.translation.y = world_position.y;
+        if self.if_mask_follow_cursor {
+            for sprite in self.sprites.iter_mut() {
+                if sprite.texture_id == 3 {
+                    sprite.transform.translation.x = world_position.x;
+                    sprite.transform.translation.y = world_position.y;
+                }
+            }
+        } else if self.if_blur_follow_cursor {
+            for sprite in self.sprites.iter_mut() {
+                if sprite.texture_id == 5 {
+                    sprite.transform.translation.x = world_position.x;
+                    sprite.transform.translation.y = world_position.y;
+                }
             }
         }
         false

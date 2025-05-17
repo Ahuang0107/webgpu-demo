@@ -6,6 +6,7 @@ pub enum RenderItem {
         range: Range<u32>,
         texture_id: u32,
         sort_key: f32,
+        if_blend_mode: bool,
     },
     SpriteMaskStart {
         range: Range<u32>,
