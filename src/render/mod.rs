@@ -1,11 +1,15 @@
 mod camera;
+mod pipeline;
 mod rect;
+mod render_item;
 mod sprite;
 mod sprite_instance;
 mod transform;
 
 pub use camera::*;
+pub use pipeline::*;
 pub use rect::*;
+pub use render_item::*;
 pub use sprite::*;
 pub use sprite_instance::*;
 pub use transform::*;
@@ -16,6 +20,8 @@ use wgpu::util::DeviceExt;
 
 pub const TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
+pub const MASK_TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Stencil8;
+
 pub struct Render {
     pub surface: wgpu::Surface<'static>,
     device: wgpu::Device,
@@ -23,7 +29,12 @@ pub struct Render {
     pub config: wgpu::SurfaceConfiguration,
     view_uniform_bind_group_layout: wgpu::BindGroupLayout,
     texture_bind_group_layout: wgpu::BindGroupLayout,
+    mask_texture: wgpu::Texture,
+    grab_texture: wgpu::Texture,
+    grab_texture_bind_group: wgpu::BindGroup,
     render_pipeline: wgpu::RenderPipeline,
+    mask_start_pipeline: wgpu::RenderPipeline,
+    mask_end_pipeline: wgpu::RenderPipeline,
     textures: HashMap<u32, (Vec2, wgpu::BindGroup)>,
 }
 
@@ -116,48 +127,136 @@ impl Render {
                 ],
                 label: None,
             });
+        let mask_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Mask Texture"),
+            size: wgpu::Extent3d {
+                width: size.width,
+                height: size.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: MASK_TEXTURE_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let grab_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Grab Texture"),
+            size: wgpu::Extent3d {
+                width: size.width,
+                height: size.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: TEXTURE_FORMAT,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let grab_texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(
+                        &grab_texture.create_view(&wgpu::TextureViewDescriptor::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(
+                        &device.create_sampler(&wgpu::SamplerDescriptor::default()),
+                    ),
+                },
+            ],
+            label: None,
+        });
 
         let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(
-                &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("Render Pipeline Layout"),
-                    bind_group_layouts: &[
-                        &view_uniform_bind_group_layout,
-                        &texture_bind_group_layout,
-                    ],
-                    push_constant_ranges: &[],
-                }),
-            ),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[SpriteInstance::desc()],
+        let render_pipeline = create_pipeline(
+            "Render Pipeline",
+            &device,
+            &[&view_uniform_bind_group_layout, &texture_bind_group_layout],
+            &shader,
+            SpriteInstance::desc(),
+            wgpu::ColorTargetState {
+                format: TEXTURE_FORMAT,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
             },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: TEXTURE_FORMAT,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
+            Some(wgpu::DepthStencilState {
+                format: MASK_TEXTURE_FORMAT,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::Always,
+                stencil: wgpu::StencilState {
+                    front: wgpu::StencilFaceState {
+                        compare: wgpu::CompareFunction::Equal,
+                        ..Default::default()
+                    },
+                    back: wgpu::StencilFaceState::IGNORE,
+                    read_mask: !0,
+                    write_mask: !0,
+                },
+                bias: wgpu::DepthBiasState::default(),
             }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                ..Default::default()
+        );
+        let mask_shader = device.create_shader_module(wgpu::include_wgsl!("mask_shader.wgsl"));
+        let mask_start_pipeline = create_pipeline(
+            "Mask Start Pipeline",
+            &device,
+            &[&view_uniform_bind_group_layout, &texture_bind_group_layout],
+            &mask_shader,
+            SpriteInstance::desc(),
+            wgpu::ColorTargetState {
+                format: config.format,
+                blend: None,
+                write_mask: wgpu::ColorWrites::empty(),
             },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            multiview: None,
-            cache: None,
-        });
+            Some(wgpu::DepthStencilState {
+                format: MASK_TEXTURE_FORMAT,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::Always,
+                stencil: wgpu::StencilState {
+                    front: wgpu::StencilFaceState {
+                        pass_op: wgpu::StencilOperation::IncrementClamp,
+                        ..Default::default()
+                    },
+                    back: wgpu::StencilFaceState::IGNORE,
+                    read_mask: !0,
+                    write_mask: !0,
+                },
+                bias: Default::default(),
+            }),
+        );
+        let mask_end_pipeline = create_pipeline(
+            "Mask End Pipeline",
+            &device,
+            &[&view_uniform_bind_group_layout, &texture_bind_group_layout],
+            &mask_shader,
+            SpriteInstance::desc(),
+            wgpu::ColorTargetState {
+                format: config.format,
+                blend: None,
+                write_mask: wgpu::ColorWrites::empty(),
+            },
+            Some(wgpu::DepthStencilState {
+                format: MASK_TEXTURE_FORMAT,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::Always,
+                stencil: wgpu::StencilState {
+                    front: wgpu::StencilFaceState {
+                        pass_op: wgpu::StencilOperation::DecrementClamp,
+                        ..Default::default()
+                    },
+                    back: wgpu::StencilFaceState::IGNORE,
+                    read_mask: !0,
+                    write_mask: !0,
+                },
+                bias: Default::default(),
+            }),
+        );
 
         Ok(Render {
             surface,
@@ -166,7 +265,12 @@ impl Render {
             config,
             view_uniform_bind_group_layout,
             texture_bind_group_layout,
+            mask_texture,
+            grab_texture,
+            grab_texture_bind_group,
             render_pipeline,
+            mask_start_pipeline,
+            mask_end_pipeline,
             textures: HashMap::new(),
         })
     }
@@ -175,6 +279,58 @@ impl Render {
         self.config.height = height;
         if self.config.width > 0 && self.config.height > 0 {
             self.surface.configure(&self.device, &self.config);
+
+            let size = wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            };
+
+            let mask_texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("Mask Texture"),
+                size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: MASK_TEXTURE_FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            let grab_texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("Grab Texture"),
+                size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: TEXTURE_FORMAT,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            let grab_texture_bind_group =
+                self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    layout: &self.texture_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(
+                                &grab_texture.create_view(&wgpu::TextureViewDescriptor::default()),
+                            ),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(
+                                &self
+                                    .device
+                                    .create_sampler(&wgpu::SamplerDescriptor::default()),
+                            ),
+                        },
+                    ],
+                    label: None,
+                });
+
+            self.mask_texture = mask_texture;
+            self.grab_texture = grab_texture;
+            self.grab_texture_bind_group = grab_texture_bind_group;
         }
     }
     pub fn load_texture(&mut self, image_bytes: &[u8]) -> u32 {
@@ -250,6 +406,9 @@ impl Render {
         let frame_view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+        let mask_view = self
+            .mask_texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
 
         #[cfg(feature = "profiling")]
         profiling::scope!("Create ViewUniform Bind Group");
@@ -277,53 +436,62 @@ impl Render {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Render Encoder (Tracy)"),
             });
-
-        struct RenderItem {
-            vertex_buffer: wgpu::Buffer,
-            index_buffer: wgpu::Buffer,
-            texture_id: u32,
-            sort_key: f32,
-        }
+        let index_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(&[2_u32, 0, 1, 1, 3, 2]),
+                usage: wgpu::BufferUsages::INDEX,
+            });
 
         #[cfg(feature = "profiling")]
         profiling::scope!("Convert Sprites");
-        let mut render_items = sprites
-            .into_iter()
-            .filter_map(|sprite| {
-                if let Some((image_size, _)) = self.textures.get(&sprite.texture_id) {
-                    let sprite_instance = SpriteInstance::from(
-                        &sprite.calculate_transform(*image_size),
-                        &sprite.calculate_uv_offset_scale(*image_size),
-                    );
-                    let vertex_buffer =
-                        self.device
-                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("Vertex Buffer"),
-                                contents: bytemuck::cast_slice(&[sprite_instance]),
-                                usage: wgpu::BufferUsages::VERTEX,
-                            });
-                    let index_buffer =
-                        self.device
-                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("Index Buffer"),
-                                contents: bytemuck::cast_slice(&[2_u32, 0, 1, 1, 3, 2]),
-                                usage: wgpu::BufferUsages::INDEX,
-                            });
-                    Some(RenderItem {
-                        vertex_buffer,
-                        index_buffer,
+        let mut render_items: Vec<RenderItem> = Vec::with_capacity(sprites.len());
+        let mut sprite_instances: Vec<SpriteInstance> = Vec::with_capacity(sprites.len());
+        for (index, sprite) in sprites.into_iter().enumerate() {
+            let index = index as u32;
+            if let Some((image_size, _)) = self.textures.get(&sprite.texture_id) {
+                let sprite_instance = SpriteInstance::from(
+                    &sprite.calculate_transform(*image_size),
+                    &sprite.calculate_uv_offset_scale(*image_size),
+                );
+                sprite_instances.push(sprite_instance);
+                if let Some([mask_start, mask_end]) = sprite.mask {
+                    render_items.push(RenderItem::SpriteMaskStart {
+                        range: index..index + 1,
+                        texture_id: sprite.texture_id,
+                        sort_key: mask_start,
+                    });
+                    render_items.push(RenderItem::SpriteMaskEnd {
+                        range: index..index + 1,
+                        texture_id: sprite.texture_id,
+                        sort_key: mask_end,
+                    });
+                } else {
+                    render_items.push(RenderItem::Sprite {
+                        range: index..index + 1,
                         texture_id: sprite.texture_id,
                         sort_key: sprite.transform.translation.z,
-                    })
-                } else {
-                    None
+                    });
                 }
-            })
-            .collect::<Vec<_>>();
+            } else {
+                log::warn!("Unable to find texture({})", sprite.texture_id);
+            }
+        }
+        let buffer_size = size_of::<SpriteInstance>() * sprite_instances.len();
+        let vertex_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Vertex Buffer"),
+            size: buffer_size as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::VERTEX,
+            mapped_at_creation: false,
+        });
+        let range = 0..buffer_size;
+        let bytes: &[u8] = bytemuck::cast_slice(&sprite_instances);
+        self.queue.write_buffer(&vertex_buffer, 0, &bytes[range]);
 
         #[cfg(feature = "profiling")]
         profiling::scope!("Sort Render Items");
-        radsort::sort_by_key(&mut render_items, |item| item.sort_key);
+        radsort::sort_by_key(&mut render_items, |item| (item.sort_key(), item.type_key()));
 
         {
             #[cfg(feature = "profiling")]
@@ -334,29 +502,48 @@ impl Render {
                     view: &frame_view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 220.0 / 255.0,
+                            g: 215.0 / 255.0,
+                            b: 203.0 / 255.0,
+                            a: 1.0,
+                        }),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &mask_view,
+                    depth_ops: None,
+                    stencil_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-
-            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_stencil_reference(0);
 
             #[cfg(feature = "profiling")]
             profiling::scope!("Draw Items");
             for render_item in render_items {
-                if let Some((_, texture)) = self.textures.get(&render_item.texture_id) {
+                if let Some((_, texture)) = self.textures.get(&render_item.texture_id()) {
+                    match render_item {
+                        RenderItem::Sprite { .. } => {
+                            render_pass.set_pipeline(&self.render_pipeline);
+                        }
+                        RenderItem::SpriteMaskStart { .. } => {
+                            render_pass.set_pipeline(&self.mask_start_pipeline);
+                        }
+                        RenderItem::SpriteMaskEnd { .. } => {
+                            render_pass.set_pipeline(&self.mask_end_pipeline);
+                        }
+                    }
                     render_pass.set_bind_group(0, &view_uniform_bind_group, &[]);
                     render_pass.set_bind_group(1, texture, &[]);
-                    render_pass.set_vertex_buffer(0, render_item.vertex_buffer.slice(..));
-                    render_pass.set_index_buffer(
-                        render_item.index_buffer.slice(..),
-                        wgpu::IndexFormat::Uint32,
-                    );
-                    render_pass.draw_indexed(0..6_u32, 0, 0..1);
+                    render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                    render_pass.draw_indexed(0..6_u32, 0, render_item.range().clone());
                 }
             }
         }

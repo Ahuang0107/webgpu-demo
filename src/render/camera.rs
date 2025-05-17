@@ -1,5 +1,5 @@
 use crate::{Rect, Transform};
-use glam::{Mat4, Vec2, Vec4};
+use glam::{Mat4, Vec2, Vec3, Vec4};
 
 pub struct Camera2D {
     /// Specifies the origin of the viewport as a normalized position from 0 to 1, where (0, 0) is the bottom left
@@ -83,6 +83,16 @@ impl Camera2D {
                 self.viewport_size.y,
             ),
         }
+    }
+
+    pub fn viewport_to_world(&self, mut viewport_position: Vec2) -> Vec3 {
+        let target_size = self.viewport_size;
+        // Flip the Y co-ordinate origin from the top to the bottom.
+        viewport_position.y = target_size.y - viewport_position.y;
+        let ndc = viewport_position * 2. / target_size - Vec2::ONE;
+
+        let ndc_to_world = self.transform.compute_matrix() * self.get_clip_from_view().inverse();
+        ndc_to_world.project_point3(ndc.extend(1.))
     }
 }
 

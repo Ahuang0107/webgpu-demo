@@ -12,6 +12,8 @@ pub struct Sprite {
     pub flip_x: bool,
     pub flip_y: bool,
     pub anchor: Vec2,
+    /// Mask range
+    pub mask: Option<[f32; 2]>,
 }
 
 impl Sprite {

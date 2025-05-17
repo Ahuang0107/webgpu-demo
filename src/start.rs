@@ -36,6 +36,8 @@ impl App for AppData {
         ));
         let example_1 = render.load_texture(include_bytes!("example.png"));
         let example_2 = render.load_texture(include_bytes!("example2.png"));
+        let example_3 = render.load_texture(include_bytes!("example3.png"));
+        let mask_example = render.load_texture(include_bytes!("mask-example.png"));
         // TODO 当窗口尺寸为奇数时，会因为浮点数精度问题，导致渲染出来的 sprite slice不完整
         let font = render.load_texture(include_bytes!("monogram-bitmap.png"));
         let font_map: HashMap<char, Rect> = HashMap::from([
@@ -51,6 +53,7 @@ impl App for AppData {
             ('9', Rect::new(54.0, 12.0, 60.0, 24.0)),
         ]);
         let sprites = vec![
+            // 正常 sprite
             Sprite {
                 transform: Transform::from_translation(Vec3::new(150.0, 100.0, 1.0)),
                 texture_id: example_1,
@@ -61,6 +64,19 @@ impl App for AppData {
                 texture_id: example_2,
                 ..Default::default()
             },
+            Sprite {
+                transform: Transform::from_translation(Vec3::new(0.0, 0.0, 2.0)),
+                texture_id: example_3,
+                ..Default::default()
+            },
+            // sprite mask，应用在 example_1 和 example_3 上
+            Sprite {
+                transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
+                texture_id: mask_example,
+                mask: Some([1.0, 2.0]),
+                ..Default::default()
+            },
+            // 裁切显示
             Sprite {
                 transform: Transform::from_translation(Vec3::new(0.0, 0.0, 100.0)),
                 texture_id: font,
@@ -123,7 +139,17 @@ impl App for AppData {
         false
     }
 
-    fn cursor_move(&mut self, _position: PhysicalPosition<f64>) -> bool {
+    fn cursor_move(&mut self, position: PhysicalPosition<f64>) -> bool {
+        let world_position = self
+            .camera
+            .viewport_to_world(Vec2::new(position.x as f32, position.y as f32))
+            .truncate();
+        for sprite in self.sprites.iter_mut() {
+            if sprite.texture_id == 3 {
+                sprite.transform.translation.x = world_position.x;
+                sprite.transform.translation.y = world_position.y;
+            }
+        }
         false
     }
 
