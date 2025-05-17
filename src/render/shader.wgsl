@@ -9,7 +9,6 @@ fn affine3_to_square(affine: mat3x4<f32>) -> mat4x4<f32> {
 
 struct View {
     clip_from_world: mat4x4<f32>,
-    // viewport(x_origin, y_origin, width, height)
     viewport: vec4<f32>,
 };
 
@@ -17,9 +16,6 @@ struct View {
 
 struct VertexInput {
     @builtin(vertex_index) index: u32,
-    // NOTE: Instance-rate vertex buffer members prefixed with i_
-    // NOTE: i_model_transpose_colN are the 3 columns of a 3x4 matrix that is the transpose of the
-    // affine 4x3 model matrix.
     @location(0) i_model_transpose_col0: vec4<f32>,
     @location(1) i_model_transpose_col1: vec4<f32>,
     @location(2) i_model_transpose_col2: vec4<f32>,
