@@ -164,8 +164,12 @@ impl<T: App + 'static> ApplicationHandler for AppHandler<T> {
             wasm_bindgen_futures::spawn_local(async move {
                 let window_cloned = window.clone();
 
+                // NOTE 这里需要注意，必须先执行异步操作创建出 inner_app
+                //  然后获取 app 的锁进行更新
+                //  如果顺序倒转，会引发死锁，这也是之前打包遇到 Parking not supported on this platform 报错的原因
+                let inner_app = T::new(window).await;
                 let mut app = app.lock();
-                *app = Some(T::new(window).await);
+                *app = Some(inner_app);
 
                 if let Some(resize) = *missed_resize.lock() {
                     app.as_mut().unwrap().set_window_resized(resize);
