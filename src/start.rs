@@ -141,6 +141,12 @@ impl App for AppData {
         if let PhysicalKey::Code(key_code) = event.physical_key {
             let camera = &mut self.camera;
             match key_code {
+                KeyCode::KeyZ => {
+                    camera.transform.scale -= Vec3::splat(0.1);
+                }
+                KeyCode::KeyX => {
+                    camera.transform.scale += Vec3::splat(0.1);
+                }
                 KeyCode::ArrowLeft => {
                     camera.transform.translation.x -= 1.0;
                 }
