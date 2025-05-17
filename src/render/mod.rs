@@ -49,10 +49,7 @@ impl Render {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         log::info!("initializing the surface...");
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            #[cfg(not(target_arch = "wasm32"))]
             backends: wgpu::Backends::PRIMARY,
-            #[cfg(target_arch = "wasm32")]
-            backends: wgpu::Backends::GL,
             #[cfg(feature = "profiling")]
             flags: wgpu::InstanceFlags::DEBUG,
             ..Default::default()
