@@ -80,20 +80,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         out = rgba_blend_soft_light(backdrop, src);
     } else if in.blend_mode == 32u {
         out = rgba_blend_hard_light(backdrop, src);
-    } else if in.blend_mode == 60u {
-        let kernel: array<f32, 9> = array<f32, 9>(0.075, 0.124, 0.075, 0.124, 0.204, 0.124, 0.075, 0.124, 0.075);
-        let offset_x: array<f32, 9> = array<f32, 9>(-2.0, 0.0, 2.0, -2.0, 0.0, 2.0, -2.0, 0.0, 2.0);
-        let offset_y: array<f32, 9> = array<f32, 9>(-2.0, -2.0, -2.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0);
-
-        var color: vec3<f32> = vec3<f32>(0.0);
-        for (var i: i32 = 0; i < 9; i = i + 1) {
-            let sample_uv = vec2<f32>(
-                (in.clip_position.x + offset_x[i]) / view.viewport.z,
-                (in.clip_position.y + offset_y[i]) / view.viewport.w
-            );
-            color += textureSample(grab_texture, grab_sampler, sample_uv).rgb * kernel[i];
-        }
-        out = vec4(color.rgb, 1.0);
     }
 
     return out;

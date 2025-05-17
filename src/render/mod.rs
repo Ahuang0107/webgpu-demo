@@ -38,6 +38,7 @@ pub struct Render {
     grab_texture_bind_group: wgpu::BindGroup,
     render_pipeline: wgpu::RenderPipeline,
     blend_mode_pipeline: wgpu::RenderPipeline,
+    blur_pipeline: wgpu::RenderPipeline,
     mask_start_pipeline: wgpu::RenderPipeline,
     mask_end_pipeline: wgpu::RenderPipeline,
     textures: HashMap<u32, (Vec2, wgpu::BindGroup)>,
@@ -237,6 +238,38 @@ impl Render {
                 bias: wgpu::DepthBiasState::default(),
             }),
         );
+        let blur_shader = device.create_shader_module(wgpu::include_wgsl!("blur_shader.wgsl"));
+        let blur_pipeline = create_pipeline(
+            "Blur Pipeline",
+            &device,
+            &[
+                &view_uniform_bind_group_layout,
+                &texture_bind_group_layout,
+                &texture_bind_group_layout,
+            ],
+            &blur_shader,
+            SpriteInstance::desc(),
+            wgpu::ColorTargetState {
+                format: TEXTURE_FORMAT,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            },
+            Some(wgpu::DepthStencilState {
+                format: MASK_TEXTURE_FORMAT,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::Always,
+                stencil: wgpu::StencilState {
+                    front: wgpu::StencilFaceState {
+                        compare: wgpu::CompareFunction::Equal,
+                        ..Default::default()
+                    },
+                    back: wgpu::StencilFaceState::IGNORE,
+                    read_mask: !0,
+                    write_mask: !0,
+                },
+                bias: wgpu::DepthBiasState::default(),
+            }),
+        );
         let mask_shader = device.create_shader_module(wgpu::include_wgsl!("mask_shader.wgsl"));
         let mask_start_pipeline = create_pipeline(
             "Mask Start Pipeline",
@@ -305,6 +338,7 @@ impl Render {
             grab_texture_bind_group,
             render_pipeline,
             blend_mode_pipeline,
+            blur_pipeline,
             mask_start_pipeline,
             mask_end_pipeline,
             textures: HashMap::new(),
@@ -494,31 +528,41 @@ impl Render {
                     sprite.blend_mode,
                 );
                 sprite_instances.push(sprite_instance);
-                if sprite.blend_mode != BlendMode::Normal {
-                    render_items.push(RenderItem::Sprite {
-                        range: index..index + 1,
-                        texture_id: sprite.texture_id,
-                        sort_key: sprite.transform.translation.z,
-                        if_blend_mode: true,
-                    });
-                } else if let Some([mask_start, mask_end]) = sprite.mask {
-                    render_items.push(RenderItem::SpriteMaskStart {
-                        range: index..index + 1,
-                        texture_id: sprite.texture_id,
-                        sort_key: mask_start,
-                    });
-                    render_items.push(RenderItem::SpriteMaskEnd {
-                        range: index..index + 1,
-                        texture_id: sprite.texture_id,
-                        sort_key: mask_end,
-                    });
-                } else {
-                    render_items.push(RenderItem::Sprite {
-                        range: index..index + 1,
-                        texture_id: sprite.texture_id,
-                        sort_key: sprite.transform.translation.z,
-                        if_blend_mode: false,
-                    });
+                match sprite.blend_mode {
+                    BlendMode::Normal => {
+                        if let Some([mask_start, mask_end]) = sprite.mask {
+                            render_items.push(RenderItem::SpriteMaskStart {
+                                range: index..index + 1,
+                                texture_id: sprite.texture_id,
+                                sort_key: mask_start,
+                            });
+                            render_items.push(RenderItem::SpriteMaskEnd {
+                                range: index..index + 1,
+                                texture_id: sprite.texture_id,
+                                sort_key: mask_end,
+                            });
+                        } else {
+                            render_items.push(RenderItem::Sprite {
+                                range: index..index + 1,
+                                texture_id: sprite.texture_id,
+                                sort_key: sprite.transform.translation.z,
+                            });
+                        }
+                    }
+                    BlendMode::Blur => {
+                        render_items.push(RenderItem::BlurSprite {
+                            range: index..index + 1,
+                            texture_id: sprite.texture_id,
+                            sort_key: sprite.transform.translation.z,
+                        });
+                    }
+                    _ => {
+                        render_items.push(RenderItem::BlendModeSprite {
+                            range: index..index + 1,
+                            texture_id: sprite.texture_id,
+                            sort_key: sprite.transform.translation.z,
+                        });
+                    }
                 }
             } else {
                 log::warn!("Unable to find texture({})", sprite.texture_id);
@@ -575,51 +619,55 @@ impl Render {
             for render_item in render_items {
                 if let Some((_, texture)) = self.textures.get(&render_item.texture_id()) {
                     match render_item {
-                        RenderItem::Sprite { if_blend_mode, .. } => {
-                            if if_blend_mode {
-                                drop(render_pass);
-                                encoder.copy_texture_to_texture(
-                                    frame.texture.as_image_copy(),
-                                    self.grab_texture.as_image_copy(),
-                                    wgpu::Extent3d {
-                                        width: self.grab_texture.width(),
-                                        height: self.grab_texture.height(),
-                                        depth_or_array_layers: 1,
+                        RenderItem::Sprite { .. } => {
+                            render_pass.set_pipeline(&self.render_pipeline);
+                        }
+                        RenderItem::BlendModeSprite { .. } | RenderItem::BlurSprite { .. } => {
+                            drop(render_pass);
+                            encoder.copy_texture_to_texture(
+                                frame.texture.as_image_copy(),
+                                self.grab_texture.as_image_copy(),
+                                wgpu::Extent3d {
+                                    width: self.grab_texture.width(),
+                                    height: self.grab_texture.height(),
+                                    depth_or_array_layers: 1,
+                                },
+                            );
+                            render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                                label: None,
+                                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                    view: &frame_view,
+                                    resolve_target: None,
+                                    ops: wgpu::Operations {
+                                        load: wgpu::LoadOp::Load,
+                                        store: wgpu::StoreOp::Store,
                                     },
-                                );
-                                render_pass =
-                                    encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                                        label: None,
-                                        color_attachments: &[Some(
-                                            wgpu::RenderPassColorAttachment {
-                                                view: &frame_view,
-                                                resolve_target: None,
-                                                ops: wgpu::Operations {
-                                                    load: wgpu::LoadOp::Load,
-                                                    store: wgpu::StoreOp::Store,
-                                                },
-                                            },
-                                        )],
-                                        depth_stencil_attachment: Some(
-                                            wgpu::RenderPassDepthStencilAttachment {
-                                                view: &mask_view,
-                                                depth_ops: None,
-                                                stencil_ops: Some(wgpu::Operations {
-                                                    load: wgpu::LoadOp::Load,
-                                                    store: wgpu::StoreOp::Store,
-                                                }),
-                                            },
-                                        ),
-                                        timestamp_writes: None,
-                                        occlusion_query_set: None,
-                                    });
-                                render_pass.set_stencil_reference(0);
+                                })],
+                                depth_stencil_attachment: Some(
+                                    wgpu::RenderPassDepthStencilAttachment {
+                                        view: &mask_view,
+                                        depth_ops: None,
+                                        stencil_ops: Some(wgpu::Operations {
+                                            load: wgpu::LoadOp::Load,
+                                            store: wgpu::StoreOp::Store,
+                                        }),
+                                    },
+                                ),
+                                timestamp_writes: None,
+                                occlusion_query_set: None,
+                            });
+                            render_pass.set_stencil_reference(0);
 
-                                render_pass.set_pipeline(&self.blend_mode_pipeline);
-                                render_pass.set_bind_group(2, &self.grab_texture_bind_group, &[]);
-                            } else {
-                                render_pass.set_pipeline(&self.render_pipeline);
+                            match render_item {
+                                RenderItem::BlendModeSprite { .. } => {
+                                    render_pass.set_pipeline(&self.blend_mode_pipeline);
+                                }
+                                RenderItem::BlurSprite { .. } => {
+                                    render_pass.set_pipeline(&self.blur_pipeline);
+                                }
+                                _ => {}
                             }
+                            render_pass.set_bind_group(2, &self.grab_texture_bind_group, &[]);
                         }
                         RenderItem::SpriteMaskStart { .. } => {
                             render_pass.set_pipeline(&self.mask_start_pipeline);
