@@ -403,9 +403,12 @@ impl Render {
             self.grab_texture_bind_group = grab_texture_bind_group;
         }
     }
-    pub fn load_texture(&mut self, image_bytes: &[u8]) -> u32 {
+    pub fn load_texture_raw(&mut self, image_bytes: &[u8]) -> u32 {
         let image = image::load_from_memory(image_bytes).unwrap();
         let image = image.to_rgba8();
+        self.load_texture(&image)
+    }
+    pub fn load_texture(&mut self, image: &image::RgbaImage) -> u32 {
         let image_size = wgpu::Extent3d {
             width: image.width(),
             height: image.height(),
@@ -466,7 +469,7 @@ impl Render {
         );
         key
     }
-    pub fn render(&mut self, camera: &Camera2D, sprites: &[Sprite]) {
+    pub fn render(&mut self, camera: &Camera2D, sprites: &[&Sprite]) {
         #[cfg(feature = "profiling")]
         profiling::scope!("Create Frame View");
         let frame = self

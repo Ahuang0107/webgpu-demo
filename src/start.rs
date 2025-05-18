@@ -1,12 +1,14 @@
-use crate::{run, App, BlendMode, Camera2D, Fps, Rect, Render, Sprite, Transform, PKG_NAME};
+use crate::{run, App, BlendMode, Camera2D, Color, Fps, Rect, Render, Sprite, Transform, PKG_NAME};
 use glam::{Vec2, Vec3};
+use isometric_engine::*;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 use wgpu::SurfaceError;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
-use winit::event::KeyEvent;
+use winit::event::{ElementState, KeyEvent, MouseButton};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::Window;
 
@@ -24,6 +26,12 @@ struct AppData {
     fps: Fps,
     if_mask_follow_cursor: bool,
     if_blur_follow_cursor: bool,
+    ui_cursor: Sprite,
+    scene: Scene,
+    image_map: HashMap<MetaModel, u32>,
+    cursor_pos: PhysicalPosition<f64>,
+    keyboard_pressed: Vec<KeyCode>,
+    mouse_pressed: Vec<MouseButton>,
 }
 
 impl App for AppData {
@@ -32,88 +40,70 @@ impl App for AppData {
             .await
             .expect("Failed to create render");
 
-        let camera = Camera2D::new(Vec2::new(
+        let mut camera = Camera2D::new(Vec2::new(
             window.inner_size().width as f32,
             window.inner_size().height as f32,
         ));
-        let example_1 = render.load_texture(include_bytes!("example.png"));
-        let example_2 = render.load_texture(include_bytes!("example2.png"));
-        let example_3 = render.load_texture(include_bytes!("example3.png"));
-        let mask_example = render.load_texture(include_bytes!("mask-example.png"));
-        let blend_example = render.load_texture(include_bytes!("blend-example.png"));
-        let blur_example = render.load_texture(include_bytes!("blur-example.png"));
-        // TODO 当窗口尺寸为奇数时，会因为浮点数精度问题，导致渲染出来的 sprite slice不完整
-        let font = render.load_texture(include_bytes!("monogram-bitmap.png"));
-        let font_map: HashMap<char, Rect> = HashMap::from([
-            ('0', Rect::new(0.0, 12.0, 6.0, 24.0)),
-            ('1', Rect::new(6.0, 12.0, 12.0, 24.0)),
-            ('2', Rect::new(12.0, 12.0, 18.0, 24.0)),
-            ('3', Rect::new(18.0, 12.0, 24.0, 24.0)),
-            ('4', Rect::new(24.0, 12.0, 30.0, 24.0)),
-            ('5', Rect::new(30.0, 12.0, 36.0, 24.0)),
-            ('6', Rect::new(36.0, 12.0, 42.0, 24.0)),
-            ('7', Rect::new(42.0, 12.0, 48.0, 24.0)),
-            ('8', Rect::new(48.0, 12.0, 54.0, 24.0)),
-            ('9', Rect::new(54.0, 12.0, 60.0, 24.0)),
-        ]);
-        let sprites = vec![
-            // 正常 sprite
-            Sprite {
-                transform: Transform::from_translation(Vec3::new(150.0, 100.0, 1.0)),
-                texture_id: example_1,
-                ..Default::default()
-            },
-            Sprite {
-                transform: Transform::from_translation(Vec3::new(-200.0, -100.0, 0.0)),
-                texture_id: example_2,
-                ..Default::default()
-            },
-            Sprite {
-                transform: Transform::from_translation(Vec3::new(0.0, 0.0, 2.0)),
-                texture_id: example_3,
-                ..Default::default()
-            },
-            // sprite mask，应用在 example_1 和 example_3 上
-            Sprite {
-                transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
-                texture_id: mask_example,
-                mask: Some([1.0, 2.0]),
-                ..Default::default()
-            },
-            // soft light 效果
-            Sprite {
-                transform: Transform::from_translation(Vec3::new(0.0, 0.0, 4.0)),
-                texture_id: blend_example,
-                blend_mode: BlendMode::SoftLight,
-                ..Default::default()
-            },
-            // blur 效果
-            Sprite {
-                transform: Transform::from_translation(Vec3::new(0.0, 0.0, 5.0)),
-                texture_id: blur_example,
-                blend_mode: BlendMode::Blur,
-                ..Default::default()
-            },
-            // 裁切显示
-            Sprite {
-                transform: Transform::from_translation(Vec3::new(0.0, 0.0, 100.0)),
-                texture_id: font,
-                rect: Some(font_map.get(&'5').unwrap().clone()),
-                ..Default::default()
-            },
-            Sprite {
-                transform: Transform::from_translation(Vec3::new(6.0, 0.0, 100.0)),
-                texture_id: font,
-                rect: Some(font_map.get(&'2').unwrap().clone()),
-                ..Default::default()
-            },
-            Sprite {
-                transform: Transform::from_translation(Vec3::new(12.0, 0.0, 100.0)),
-                texture_id: font,
-                rect: Some(font_map.get(&'0').unwrap().clone()),
-                ..Default::default()
-            },
-        ];
+        camera.transform.translation.x = 500.0;
+        camera.transform.translation.y = 500.0;
+        camera.near = -2000.0;
+        let ui_cursor_image_handle =
+            render.load_texture_raw(include_bytes!("assets/ui-cursor.png"));
+        let ui_cursor = Sprite {
+            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 500.0)),
+            texture_id: ui_cursor_image_handle,
+            anchor: Vec2::new(-0.5, 0.5),
+            ..Default::default()
+        };
+
+        let scene_bytes = include_bytes!("assets/scenes/SideBoardScene.json");
+        let scene = Scene::from_bytes(scene_bytes);
+        let package_bytes = include_bytes!("assets/package/SideBoardSceneTotal.pkg");
+        let package = Package::unpack_from_bytes(package_bytes).unwrap();
+        let mut image_map: HashMap<MetaModel, u32> =
+            HashMap::with_capacity(package.sprite_image_map.len());
+        for (key, image) in package.sprite_image_map.iter() {
+            image_map.insert(*key, render.load_texture(image));
+        }
+
+        let collect_sprites = scene.collect_sprites();
+        let collect_sprite_masks = scene.collect_sprite_masks();
+        let mut sprites: Vec<Sprite> =
+            Vec::with_capacity(collect_sprites.len() + collect_sprite_masks.len());
+        for sprite_pin in collect_sprites {
+            if let Some(image_handle) = image_map.get(&sprite_pin.meta) {
+                let [x, y, z] = sprite_pin.get_xyz();
+                let blend_mode = sprite_pin.blend_mode();
+                sprites.push(Sprite {
+                    transform: Transform::from_translation(Vec3::new(x as f32, y as f32, z as f32)),
+                    texture_id: *image_handle,
+                    anchor: Vec2::new(-0.5, -0.5),
+                    color: Color::new([255, 255, 255, sprite_pin.get_opacity()]),
+                    blend_mode: match blend_mode {
+                        isometric_engine::BlendMode::Normal => BlendMode::Normal,
+                        isometric_engine::BlendMode::Multiply => BlendMode::Multiply,
+                        isometric_engine::BlendMode::Overlay => BlendMode::Overlay,
+                        isometric_engine::BlendMode::SoftLight => BlendMode::SoftLight,
+                        isometric_engine::BlendMode::HardLight => BlendMode::HardLight,
+                    },
+                    ..Default::default()
+                });
+            }
+        }
+
+        for sprite_mask in collect_sprite_masks {
+            if let Some(image_handle) = image_map.get(&sprite_mask.meta) {
+                let [x, y] = sprite_mask.get_acl_offset();
+                let [mask_start, mask_end] = sprite_mask.get_range();
+                sprites.push(Sprite {
+                    transform: Transform::from_translation(Vec3::new(x as f32, y as f32, 0.0)),
+                    texture_id: *image_handle,
+                    anchor: Vec2::new(-0.5, -0.5),
+                    mask: Some([mask_start as f32, mask_end as f32]),
+                    ..Default::default()
+                });
+            }
+        }
 
         Self {
             render,
@@ -125,6 +115,12 @@ impl App for AppData {
             fps: Fps::new(),
             if_mask_follow_cursor: false,
             if_blur_follow_cursor: false,
+            ui_cursor,
+            scene,
+            image_map,
+            cursor_pos: PhysicalPosition::default(),
+            keyboard_pressed: Vec::new(),
+            mouse_pressed: Vec::new(),
         }
     }
 
@@ -139,13 +135,47 @@ impl App for AppData {
 
     fn keyboard_input(&mut self, event: &KeyEvent) -> bool {
         if let PhysicalKey::Code(key_code) = event.physical_key {
-            let camera = &mut self.camera;
+            match event.state {
+                ElementState::Pressed => {
+                    if !event.repeat {
+                        self.keyboard_pressed.push(key_code);
+                    }
+                }
+                ElementState::Released => {}
+            }
+            return true;
+        }
+        false
+    }
+
+    fn mouse_click(&mut self, state: ElementState, button: MouseButton) -> bool {
+        match state {
+            ElementState::Pressed => {
+                self.mouse_pressed.push(button);
+            }
+            ElementState::Released => {}
+        }
+        false
+    }
+
+    fn cursor_move(&mut self, position: PhysicalPosition<f64>) -> bool {
+        self.cursor_pos = position;
+        false
+    }
+
+    fn update(&mut self, delta: Duration) {
+        let camera = &mut self.camera;
+        for key_code in self.keyboard_pressed.drain(..) {
             match key_code {
                 KeyCode::KeyZ => {
-                    camera.transform.scale -= Vec3::splat(0.1);
+                    // NOTE 这里不能修改 z 的 scale 因为这会影响到 near 和 far
+                    //  这在 3D 游戏中是需要逻辑但是 2D 不需要
+                    camera.transform.scale.x -= 0.1;
+                    camera.transform.scale.y -= 0.1;
                 }
                 KeyCode::KeyX => {
-                    camera.transform.scale += Vec3::splat(0.1);
+                    camera.transform.scale.x += 0.1;
+                    camera.transform.scale.y += 0.1;
                 }
                 KeyCode::ArrowLeft => {
                     camera.transform.translation.x -= 1.0;
@@ -171,33 +201,87 @@ impl App for AppData {
                     self.if_mask_follow_cursor = false;
                     self.if_blur_follow_cursor = true;
                 }
+                KeyCode::KeyT => {
+                    self.scene
+                        .take_out_new_item()
+                        .expect("Failed to take out-new-item");
+                }
                 _ => {}
             }
         }
-        false
-    }
-
-    fn cursor_move(&mut self, position: PhysicalPosition<f64>) -> bool {
         let world_position = self
             .camera
-            .viewport_to_world(Vec2::new(position.x as f32, position.y as f32))
+            .viewport_to_world(Vec2::new(
+                self.cursor_pos.x as f32,
+                self.cursor_pos.y as f32,
+            ))
             .truncate();
-        if self.if_mask_follow_cursor {
-            for sprite in self.sprites.iter_mut() {
-                if sprite.texture_id == 3 {
-                    sprite.transform.translation.x = world_position.x;
-                    sprite.transform.translation.y = world_position.y;
-                }
-            }
-        } else if self.if_blur_follow_cursor {
-            for sprite in self.sprites.iter_mut() {
-                if sprite.texture_id == 5 {
-                    sprite.transform.translation.x = world_position.x;
-                    sprite.transform.translation.y = world_position.y;
-                }
+        self.ui_cursor.transform.translation.x = world_position.x;
+        self.ui_cursor.transform.translation.y = world_position.y;
+        if self.mouse_pressed.contains(&MouseButton::Left) {
+            self.scene
+                .sync(
+                    delta.as_micros() as u64,
+                    [world_position.x as i32, world_position.y as i32],
+                    1,
+                )
+                .expect("failed to sync scene");
+        } else if self.mouse_pressed.contains(&MouseButton::Right) {
+            self.scene
+                .sync(
+                    delta.as_micros() as u64,
+                    [world_position.x as i32, world_position.y as i32],
+                    2,
+                )
+                .expect("failed to sync scene");
+        } else {
+            self.scene
+                .sync(
+                    delta.as_micros() as u64,
+                    [world_position.x as i32, world_position.y as i32],
+                    0,
+                )
+                .expect("failed to sync scene");
+        }
+        self.mouse_pressed.clear();
+
+        let collect_sprites = self.scene.collect_sprites();
+        let collect_sprite_masks = self.scene.collect_sprite_masks();
+        self.sprites = Vec::with_capacity(collect_sprites.len() + collect_sprite_masks.len());
+        for sprite_pin in collect_sprites {
+            if let Some(image_handle) = self.image_map.get(&sprite_pin.meta) {
+                let [x, y, z] = sprite_pin.get_xyz();
+                let blend_mode = sprite_pin.blend_mode();
+                self.sprites.push(Sprite {
+                    transform: Transform::from_translation(Vec3::new(x as f32, y as f32, z as f32)),
+                    texture_id: *image_handle,
+                    anchor: Vec2::new(-0.5, -0.5),
+                    color: Color::new([255, 255, 255, sprite_pin.get_opacity()]),
+                    blend_mode: match blend_mode {
+                        isometric_engine::BlendMode::Normal => BlendMode::Normal,
+                        isometric_engine::BlendMode::Multiply => BlendMode::Multiply,
+                        isometric_engine::BlendMode::Overlay => BlendMode::Overlay,
+                        isometric_engine::BlendMode::SoftLight => BlendMode::SoftLight,
+                        isometric_engine::BlendMode::HardLight => BlendMode::HardLight,
+                    },
+                    ..Default::default()
+                });
             }
         }
-        false
+
+        for sprite_mask in collect_sprite_masks {
+            if let Some(image_handle) = self.image_map.get(&sprite_mask.meta) {
+                let [x, y] = sprite_mask.get_acl_offset();
+                let [mask_start, mask_end] = sprite_mask.get_range();
+                self.sprites.push(Sprite {
+                    transform: Transform::from_translation(Vec3::new(x as f32, y as f32, 0.0)),
+                    texture_id: *image_handle,
+                    anchor: Vec2::new(-0.5, -0.5),
+                    mask: Some([mask_start as f32, mask_end as f32]),
+                    ..Default::default()
+                });
+            }
+        }
     }
 
     fn render(&mut self) -> Result<(), SurfaceError> {
@@ -216,7 +300,9 @@ impl App for AppData {
 
         // 窗口最小化时只更新数据不渲染画面
         if self.size.width > 0 && self.size.height > 0 {
-            self.render.render(&self.camera, self.sprites.as_slice());
+            let mut sprites: Vec<&Sprite> = self.sprites.iter().collect();
+            sprites.push(&self.ui_cursor);
+            self.render.render(&self.camera, sprites.as_slice());
         }
         self.fps.update();
         #[cfg(feature = "profiling")]
