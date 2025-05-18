@@ -103,7 +103,7 @@ fn blend_soft_light(base: f32, src: f32) -> f32 {
 }
 
 fn blend_hard_light(backdrop: f32, src: f32) -> f32 {
-    return select(blend_screen(backdrop, (src * 2.0 - 255.0)), blend_multiply(backdrop, src * 2.0), src < 128.0);
+    return select(blend_screen(backdrop, (src * 2.0 - 1.0)), blend_multiply(backdrop, src * 2.0), src < 0.5);
 }
 
 fn rgba_blend_normal(backdrop: vec4<f32>, src: vec4<f32>) -> vec4<f32> {
