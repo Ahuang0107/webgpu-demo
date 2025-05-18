@@ -99,6 +99,7 @@ impl<T: App> AppHandler<T> {
     fn config_window(&mut self) {
         let window = self.window.as_mut().unwrap();
         window.set_title(self.title);
+        window.set_cursor_visible(false);
 
         #[cfg(target_arch = "wasm32")]
         {
@@ -280,10 +281,14 @@ impl<T: App + 'static> ApplicationHandler for AppHandler<T> {
 fn init_logger() {
     #[cfg(target_arch = "wasm32")]
     {
+        #[cfg(debug_assertions)]
+        let default_log_level = log::LevelFilter::Info;
+        #[cfg(not(debug_assertions))]
+        let default_log_level = log::LevelFilter::Warn;
+
         // 在 web 上，我们使用 fern，因为 console_log 没有按模块级别过滤功能。
         fern::Dispatch::new()
-            .level(log::LevelFilter::Info)
-            .level_for(crate::PKG_NAME, log::LevelFilter::Warn)
+            .level(default_log_level)
             .level_for("wgpu_core", log::LevelFilter::Info)
             .level_for("wgpu_hal", log::LevelFilter::Error)
             .level_for("naga", log::LevelFilter::Error)
@@ -295,10 +300,14 @@ fn init_logger() {
 
     #[cfg(not(target_arch = "wasm32"))]
     {
+        #[cfg(debug_assertions)]
+        let default_log_level = log::LevelFilter::Info;
+        #[cfg(not(debug_assertions))]
+        let default_log_level = log::LevelFilter::Warn;
+
         // parse_default_env 会读取 RUST_LOG 环境变量，并在这些默认过滤器之上应用它。
         env_logger::builder()
-            .filter_level(log::LevelFilter::Info)
-            .filter_module(crate::PKG_NAME, log::LevelFilter::Warn)
+            .filter_level(default_log_level)
             .filter_module("wgpu_core", log::LevelFilter::Info)
             .filter_module("wgpu_hal", log::LevelFilter::Error)
             .filter_module("naga", log::LevelFilter::Error)
