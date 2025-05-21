@@ -1,9 +1,11 @@
 mod app;
+mod audio;
 mod fps;
 mod render;
 mod start;
 
 pub use app::*;
+pub use audio::*;
 pub use fps::*;
 pub use render::*;
 pub use start::*;

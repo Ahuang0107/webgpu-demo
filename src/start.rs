@@ -1,4 +1,6 @@
-use crate::{run, App, BlendMode, Camera2D, Color, Fps, Rect, Render, Sprite, Transform, PKG_NAME};
+use crate::{
+    run, App, Audio, BlendMode, Camera2D, Color, Fps, Render, Sprite, Transform, PKG_NAME,
+};
 use glam::{Vec2, Vec3};
 use isometric_engine::*;
 use std::collections::HashMap;
@@ -19,6 +21,7 @@ pub fn start() {
 
 struct AppData {
     render: Render,
+    audio: Audio,
     camera: Camera2D,
     sprites: Vec<Sprite>,
     size: PhysicalSize<u32>,
@@ -26,6 +29,9 @@ struct AppData {
     fps: Fps,
     if_mask_follow_cursor: bool,
     if_blur_follow_cursor: bool,
+    /// 因为 web 上运行时，需要玩家点击了窗口后，才能初始化 AudioContext 所以需要检测第一次点击，重新初始化一遍 audio
+    #[cfg(target_arch = "wasm32")]
+    if_focused: bool,
     ui_cursor: Sprite,
     scene: Scene,
     image_map: HashMap<MetaModel, u32>,
@@ -39,6 +45,11 @@ impl App for AppData {
         let mut render = Render::new(window.clone())
             .await
             .expect("Failed to create render");
+        let mut audio = Audio::default();
+        audio.resume_audio_context();
+        audio.load_source(include_bytes!("assets/audio/long_sound_effect.ogg").into());
+        audio.load_source(include_bytes!("assets/audio/short_sound_effect.ogg").into());
+        audio.play_sound(0);
 
         let mut camera = Camera2D::new(Vec2::new(
             window.inner_size().width as f32,
@@ -107,6 +118,7 @@ impl App for AppData {
 
         Self {
             render,
+            audio,
             camera,
             sprites,
             size: window.inner_size(),
@@ -115,6 +127,8 @@ impl App for AppData {
             fps: Fps::new(),
             if_mask_follow_cursor: false,
             if_blur_follow_cursor: false,
+            #[cfg(target_arch = "wasm32")]
+            if_focused: false,
             ui_cursor,
             scene,
             image_map,
@@ -164,6 +178,8 @@ impl App for AppData {
     }
 
     fn update(&mut self, delta: Duration) {
+        self.audio.clean_finished_sink();
+
         let camera = &mut self.camera;
         for key_code in self.keyboard_pressed.drain(..) {
             match key_code {
@@ -206,6 +222,9 @@ impl App for AppData {
                         .take_out_new_item()
                         .expect("Failed to take out-new-item");
                 }
+                KeyCode::KeyP => {
+                    self.audio.play_sound(1);
+                }
                 _ => {}
             }
         }
@@ -218,8 +237,15 @@ impl App for AppData {
             .truncate();
         self.ui_cursor.transform.translation.x = world_position.x;
         self.ui_cursor.transform.translation.y = world_position.y;
+        let mut result = 0;
         if self.mouse_pressed.contains(&MouseButton::Left) {
-            self.scene
+            #[cfg(target_arch = "wasm32")]
+            if !self.if_focused {
+                self.if_focused = true;
+                self.audio.resume_audio_context();
+            }
+            result = self
+                .scene
                 .sync(
                     delta.as_micros() as u64,
                     [world_position.x as i32, world_position.y as i32],
@@ -227,7 +253,8 @@ impl App for AppData {
                 )
                 .expect("failed to sync scene");
         } else if self.mouse_pressed.contains(&MouseButton::Right) {
-            self.scene
+            result = self
+                .scene
                 .sync(
                     delta.as_micros() as u64,
                     [world_position.x as i32, world_position.y as i32],
@@ -235,7 +262,8 @@ impl App for AppData {
                 )
                 .expect("failed to sync scene");
         } else {
-            self.scene
+            result = self
+                .scene
                 .sync(
                     delta.as_micros() as u64,
                     [world_position.x as i32, world_position.y as i32],
@@ -244,6 +272,16 @@ impl App for AppData {
                 .expect("failed to sync scene");
         }
         self.mouse_pressed.clear();
+        match result {
+            0 => {}
+            1 => {
+                self.audio.play_sound(1);
+            }
+            2 => {
+                self.audio.play_sound(1);
+            }
+            _ => {}
+        }
 
         let collect_sprites = self.scene.collect_sprites();
         let collect_sprite_masks = self.scene.collect_sprite_masks();

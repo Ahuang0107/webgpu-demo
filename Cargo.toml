@@ -23,9 +23,11 @@ image = { version = "0.25.6", default-features = false, features = ["png"] }
 pollster = "0.4.0"
 env_logger = "0.11.8"
 instant = { version = "0.1.13", features = ["now"] }
+rodio = { version = "0.20.1", default-features = false, features = ["vorbis"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 instant = { version = "0.1.13", features = ["now", "wasm-bindgen"] }
+rodio = { version = "0.20.1", default-features = false, features = ["vorbis", "wasm-bindgen"] }
 console_error_panic_hook = "0.1.7"
 console_log = "1.0"
 fern = "0.7"
