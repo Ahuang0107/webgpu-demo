@@ -57,6 +57,8 @@ impl App for AppData {
         ));
         camera.transform.translation.x = 500.0;
         camera.transform.translation.y = 500.0;
+        camera.transform.scale.x = 0.5;
+        camera.transform.scale.y = 0.5;
         camera.near = -2000.0;
         let ui_cursor_image_handle =
             render.load_texture_raw(include_bytes!("assets/ui-cursor.png"));

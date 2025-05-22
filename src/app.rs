@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use wgpu::WasmNotSend;
 use winit::application::ApplicationHandler;
-use winit::dpi::{PhysicalPosition, PhysicalSize};
+use winit::dpi::{PhysicalPosition, PhysicalSize, Size};
 use winit::event::{
     DeviceEvent, ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent,
 };
@@ -152,7 +152,8 @@ impl<T: App + 'static> ApplicationHandler for AppHandler<T> {
 
         self.last_render_time = instant::Instant::now();
 
-        let window_attributes = Window::default_attributes();
+        let mut window_attributes = Window::default_attributes();
+        window_attributes.inner_size = Some(Size::Physical(PhysicalSize::new(1920, 1080)));
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
         self.window = Some(window.clone());
         self.config_window();
