@@ -49,9 +49,21 @@ impl App for AppData {
             .expect("Failed to create render");
         let mut audio = Audio::default();
         audio.resume_audio_context();
-        audio.load_source(include_bytes!("assets/audio/long_sound_effect.ogg").into());
-        audio.load_source(include_bytes!("assets/audio/short_sound_effect.ogg").into());
-        audio.play_sound(0);
+        audio.load_source(
+            "pickup",
+            include_bytes!("assets/audio/pickup_demo.ogg").into(),
+        );
+        audio.load_source(
+            "putdown",
+            include_bytes!("assets/audio/putdown_demo_2.ogg").into(),
+        );
+        audio.load_source("bgm", include_bytes!("assets/audio/level1_bgm2.ogg").into());
+        audio.load_source(
+            "ambient",
+            include_bytes!("assets/audio/ambient_sound_demo.ogg").into(),
+        );
+        audio.play_sound("bgm");
+        audio.play_sound("ambient");
 
         let mut camera = Camera2D::new(Vec2::new(
             window.inner_size().width as f32,
@@ -196,6 +208,22 @@ impl App for AppData {
         if self.keyboard_pressed.contains(&KeyCode::KeyW) {
             self.config.set_as_wallpaper = true;
         }
+        if self.keyboard_pressed.contains(&KeyCode::KeyL) {
+            if let Some(sink) = self.audio.get_sink(0) {
+                sink.set_volume(0.1);
+            }
+            if let Some(sink) = self.audio.get_sink(1) {
+                sink.set_volume(0.1);
+            }
+        }
+        if self.keyboard_pressed.contains(&KeyCode::KeyU) {
+            if let Some(sink) = self.audio.get_sink(0) {
+                sink.set_volume(1.0);
+            }
+            if let Some(sink) = self.audio.get_sink(1) {
+                sink.set_volume(1.0);
+            }
+        }
         for key_code in self.keyboard_pressed.drain(..) {
             match key_code {
                 KeyCode::KeyZ => {
@@ -236,9 +264,6 @@ impl App for AppData {
                     self.scene
                         .take_out_new_item()
                         .expect("Failed to take out-new-item");
-                }
-                KeyCode::KeyP => {
-                    self.audio.play_sound(1);
                 }
                 _ => {}
             }
@@ -287,13 +312,16 @@ impl App for AppData {
                 .expect("failed to sync scene");
         }
         self.mouse_pressed.clear();
+
         match result {
             0 => {}
             1 => {
-                self.audio.play_sound(1);
+                log::info!("sync reuslt: {result}");
+                self.audio.play_sound("putdown");
             }
             2 => {
-                self.audio.play_sound(1);
+                log::info!("sync reuslt: {result}");
+                self.audio.play_sound("pickup");
             }
             _ => {}
         }
