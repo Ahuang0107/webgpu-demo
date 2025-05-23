@@ -7,6 +7,9 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 name = "webgpu_demo_lib"
 
+[features]
+windows_wallpaper = ["windows"]
+
 [dependencies]
 isometric-engine = { path = "../../rust-project/isometric-engine" }
 winit = "0.30.10"
@@ -24,6 +27,7 @@ pollster = "0.4.0"
 env_logger = "0.11.8"
 instant = { version = "0.1.13", features = ["now"] }
 rodio = { version = "0.20.1", default-features = false, features = ["vorbis"] }
+windows = { version = "0.58.0", features = ["Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse"], optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 instant = { version = "0.1.13", features = ["now", "wasm-bindgen"] }

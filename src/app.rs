@@ -23,14 +23,14 @@ pub trait App {
     #[allow(opaque_hidden_inferred_bound)]
     fn new(window: Arc<Window>) -> impl Future<Output = Self> + WasmNotSend;
 
+    fn get_config(&self) -> &AppConfig;
+
     /// 记录窗口大小已发生变化
     ///
     /// # NOTE:
     /// 当缩放浏览器窗口时, 窗口大小会以高于渲染帧率的频率发生变化，
     /// 如果窗口 size 发生变化就立即调整 surface 大小, 会导致缩放浏览器窗口大小时渲染画面闪烁。
     fn set_window_resized(&mut self, new_size: PhysicalSize<u32>);
-    /// 获取窗口大小    
-    fn get_size(&self) -> PhysicalSize<u32>;
 
     /// 键盘事件
     fn keyboard_input(&mut self, _event: &KeyEvent) -> bool {
@@ -61,10 +61,30 @@ pub trait App {
     fn render(&mut self) -> Result<(), wgpu::SurfaceError>;
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct AppConfig {
+    #[cfg(feature = "windows_wallpaper")]
+    pub set_as_wallpaper: bool,
+    pub fullscreen: bool,
+    pub decorations: bool,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            #[cfg(feature = "windows_wallpaper")]
+            set_as_wallpaper: false,
+            fullscreen: false,
+            decorations: true,
+        }
+    }
+}
+
 pub struct AppHandler<T: App> {
     window: Option<Arc<Window>>,
     title: &'static str,
     app: Rc<Mutex<Option<T>>>,
+    config: AppConfig,
     /// 错失的窗口大小变化
     ///
     /// # NOTE
@@ -89,6 +109,7 @@ impl<T: App> AppHandler<T> {
             title,
             window: None,
             app: Rc::new(Mutex::new(None)),
+            config: AppConfig::default(),
             missed_resize: Rc::new(Mutex::new(None)),
             missed_request_redraw: Rc::new(Mutex::new(false)),
             last_render_time: instant::Instant::now(),
@@ -139,6 +160,46 @@ impl<T: App> AppHandler<T> {
     fn request_redraw(&self) {
         if let Some(window) = self.window.as_ref() {
             window.request_redraw();
+        }
+    }
+
+    #[cfg(feature = "windows_wallpaper")]
+    fn set_as_wallpaper(&self) {
+        use windows::core::s;
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::{FindWindowExA, SetParent};
+
+        if let Some(window) = self.window.as_ref() {
+            unsafe {
+                // 直接循环找最后一个 WorkerW
+                // 目前通过 spy++ 直接查看 windows 窗口句柄
+                // 需要插入的 WorkerW 就在最后一个 Program Manger 之前
+                let mut worker_w_opt = FindWindowExA(None, None, s!("WorkerW"), None).ok();
+                while worker_w_opt.is_some() {
+                    let worker_w_hwnd = worker_w_opt.clone().unwrap();
+                    if let Some(new_worker_w_opt) =
+                        FindWindowExA(None, worker_w_hwnd, s!("WorkerW"), None).ok()
+                    {
+                        worker_w_opt = Some(new_worker_w_opt);
+                    } else {
+                        break;
+                    }
+                }
+                // let worker_w_hwnd = HWND(0x202E6 as *mut _);
+                let worker_w_hwnd = worker_w_opt.clone().unwrap();
+                log::info!("WorkerW: {worker_w_hwnd:?}");
+
+                let window_id = window.id();
+                log::info!("Bevy Window ID: {:?}", window_id);
+                let window_id: u64 = window_id.into();
+                log::info!("Bevy Window ID(u64): {}", window_id);
+
+                let hwnd = HWND(window_id as *mut _);
+                log::info!("Bevy Window HWND: {:?}", hwnd);
+
+                let result = SetParent(hwnd, worker_w_hwnd);
+                log::info!("SetParent result: {result:?}");
+            }
         }
     }
 }
@@ -217,6 +278,28 @@ impl<T: App + 'static> ApplicationHandler for AppHandler<T> {
         }
 
         let app = app.as_mut().unwrap();
+
+        let new_config = app.get_config().clone();
+        #[cfg(feature = "windows_wallpaper")]
+        if new_config.set_as_wallpaper != self.config.set_as_wallpaper {
+            if new_config.set_as_wallpaper {
+                self.set_as_wallpaper();
+            }
+            self.config.set_as_wallpaper = new_config.set_as_wallpaper;
+        }
+        let window = self.window.as_mut().unwrap();
+        if new_config.fullscreen != self.config.fullscreen {
+            if new_config.fullscreen {
+                window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+            }
+
+            self.config.fullscreen = new_config.fullscreen;
+        }
+        if new_config.decorations != self.config.decorations {
+            window.set_decorations(new_config.decorations);
+
+            self.config.decorations = new_config.decorations;
+        }
         match event {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
@@ -276,6 +359,20 @@ impl<T: App + 'static> ApplicationHandler for AppHandler<T> {
                 self.request_redraw();
             }
             _ => (),
+        }
+
+        // 在背景层运行时，就需要主动检测设备输入
+        #[cfg(feature = "windows_wallpaper")]
+        if self.config.set_as_wallpaper {
+            use windows::Win32::Foundation::POINT;
+            use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+
+            unsafe {
+                let mut point = POINT { x: 0, y: 0 };
+                if GetCursorPos(&mut point).is_ok() {
+                    let _ = app.cursor_move(PhysicalPosition::new(point.x as f64, point.y as f64));
+                }
+            }
         }
     }
 }

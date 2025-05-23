@@ -1,5 +1,6 @@
 use crate::{
-    run, App, Audio, BlendMode, Camera2D, Color, Fps, Render, Sprite, Transform, PKG_NAME,
+    run, App, AppConfig, Audio, BlendMode, Camera2D, Color, Fps, Render, Sprite, Transform,
+    PKG_NAME,
 };
 use glam::{Vec2, Vec3};
 use isometric_engine::*;
@@ -20,6 +21,7 @@ pub fn start() {
 }
 
 struct AppData {
+    config: AppConfig,
     render: Render,
     audio: Audio,
     camera: Camera2D,
@@ -119,6 +121,7 @@ impl App for AppData {
         }
 
         Self {
+            config: AppConfig::default(),
             render,
             audio,
             camera,
@@ -145,8 +148,8 @@ impl App for AppData {
         self.if_size_changed = true;
     }
 
-    fn get_size(&self) -> PhysicalSize<u32> {
-        PhysicalSize::new(self.render.config.width, self.render.config.height)
+    fn get_config(&self) -> &AppConfig {
+        &self.config
     }
 
     fn keyboard_input(&mut self, event: &KeyEvent) -> bool {
@@ -183,6 +186,16 @@ impl App for AppData {
         self.audio.clean_finished_sink();
 
         let camera = &mut self.camera;
+        if self.keyboard_pressed.contains(&KeyCode::KeyF) {
+            self.config.fullscreen = true;
+        }
+        if self.keyboard_pressed.contains(&KeyCode::KeyB) {
+            self.config.decorations = false;
+        }
+        #[cfg(feature = "windows_wallpaper")]
+        if self.keyboard_pressed.contains(&KeyCode::KeyW) {
+            self.config.set_as_wallpaper = true;
+        }
         for key_code in self.keyboard_pressed.drain(..) {
             match key_code {
                 KeyCode::KeyZ => {
