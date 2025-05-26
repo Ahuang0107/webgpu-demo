@@ -27,6 +27,9 @@ impl Audio {
         self.audio_sources.insert(key.to_string(), source);
     }
     pub fn play_sound(&mut self, source_key: &str) -> Option<usize> {
+        self.play_sound_with_volume(source_key, 1.0)
+    }
+    pub fn play_sound_with_volume(&mut self, source_key: &str, volume: f32) -> Option<usize> {
         let Some(stream_handle) = self.stream_handle.as_ref() else {
             log::warn!("Audio output unavailable, cannot play sound");
             return None;
@@ -37,6 +40,7 @@ impl Audio {
         };
         let sink = Sink::try_new(&stream_handle).expect("Could not create audio sink");
         sink.append(source.decoder());
+        sink.set_volume(volume);
         sink.play();
         Some(self.sinks.insert(sink))
     }
@@ -44,8 +48,8 @@ impl Audio {
         self.sinks.get(key)
     }
     pub fn clean_finished_sink(&mut self) {
-        self.sinks
-            .retain(|_key, sink| if sink.empty() { false } else { true });
+        // self.sinks
+        //     .retain(|_key, sink| if sink.empty() { false } else { true });
     }
 }
 

@@ -27,12 +27,12 @@ slab = "0.4.9"
 pollster = "0.4.0"
 env_logger = "0.11.8"
 instant = { version = "0.1.13", features = ["now"] }
-rodio = { version = "0.20.1", default-features = false, features = ["vorbis"] }
+rodio = { version = "0.20.1", default-features = false, features = ["vorbis", "mp3"] }
 windows = { version = "0.58.0", features = ["Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse"], optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 instant = { version = "0.1.13", features = ["now", "wasm-bindgen"] }
-rodio = { version = "0.20.1", default-features = false, features = ["vorbis", "wasm-bindgen"] }
+rodio = { version = "0.20.1", default-features = false, features = ["vorbis", "mp3", "wasm-bindgen"] }
 console_error_panic_hook = "0.1.7"
 console_log = "1.0"
 fern = "0.7"

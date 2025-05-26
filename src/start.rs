@@ -42,6 +42,10 @@ struct AppData {
     mouse_pressed: Vec<MouseButton>,
 }
 
+pub enum AppState {
+    MainMenu,
+}
+
 impl App for AppData {
     async fn new(window: Arc<Window>) -> Self {
         let mut render = Render::new(window.clone())
@@ -54,10 +58,13 @@ impl App for AppData {
             include_bytes!("assets/audio/pickup_demo.ogg").into(),
         );
         audio.load_source(
-            "putdown",
-            include_bytes!("assets/audio/putdown_demo_2.ogg").into(),
+            "place",
+            include_bytes!("assets/audio/place_demo_2.ogg").into(),
         );
-        audio.load_source("bgm", include_bytes!("assets/audio/level1_bgm2.ogg").into());
+        audio.load_source(
+            "bgm",
+            include_bytes!("assets/audio/bgm/Carousel Dreams - The Soundlings.mp3").into(),
+        );
         audio.load_source(
             "ambient",
             include_bytes!("assets/audio/ambient_sound_demo.ogg").into(),
@@ -195,6 +202,14 @@ impl App for AppData {
     }
 
     fn update(&mut self, delta: Duration) {
+        #[cfg(target_arch = "wasm32")]
+        if self.mouse_pressed.contains(&MouseButton::Left) {
+            if !self.if_focused {
+                self.if_focused = true;
+                self.audio.resume_audio_context();
+            }
+        }
+
         self.audio.clean_finished_sink();
 
         let camera = &mut self.camera;
@@ -265,6 +280,9 @@ impl App for AppData {
                         .take_out_new_item()
                         .expect("Failed to take out-new-item");
                 }
+                KeyCode::KeyP => {
+                    self.audio.play_sound_with_volume("bgm", 0.4);
+                }
                 _ => {}
             }
         }
@@ -277,53 +295,28 @@ impl App for AppData {
             .truncate();
         self.ui_cursor.transform.translation.x = world_position.x;
         self.ui_cursor.transform.translation.y = world_position.y;
-        let mut result = 0;
-        if self.mouse_pressed.contains(&MouseButton::Left) {
-            #[cfg(target_arch = "wasm32")]
-            if !self.if_focused {
-                self.if_focused = true;
-                self.audio.resume_audio_context();
-            }
-            result = self
-                .scene
-                .sync(
-                    delta.as_micros() as u64,
-                    [world_position.x as i32, world_position.y as i32],
-                    1,
-                )
-                .expect("failed to sync scene");
+        let click_type = if self.mouse_pressed.contains(&MouseButton::Left) {
+            1
         } else if self.mouse_pressed.contains(&MouseButton::Right) {
-            result = self
-                .scene
-                .sync(
-                    delta.as_micros() as u64,
-                    [world_position.x as i32, world_position.y as i32],
-                    2,
-                )
-                .expect("failed to sync scene");
+            2
         } else {
-            result = self
-                .scene
-                .sync(
-                    delta.as_micros() as u64,
-                    [world_position.x as i32, world_position.y as i32],
-                    0,
-                )
-                .expect("failed to sync scene");
-        }
+            0
+        };
+        let sync_result = self
+            .scene
+            .sync(
+                delta.as_micros() as u64,
+                [world_position.x as i32, world_position.y as i32],
+                click_type,
+            )
+            .expect("failed to sync scene");
         self.mouse_pressed.clear();
 
-        match result {
-            0 => {}
-            1 => {
-                log::info!("sync reuslt: {result}");
-                self.audio.play_sound("putdown");
-            }
-            2 => {
-                log::info!("sync reuslt: {result}");
-                self.audio.play_sound("pickup");
-            }
-            _ => {}
+        if sync_result.if_pickup_item {
+            self.audio.play_sound("pickup");
+        }
+        if sync_result.if_place_item {
+            self.audio.play_sound("place");
         }
 
         let collect_sprites = self.scene.collect_sprites();
