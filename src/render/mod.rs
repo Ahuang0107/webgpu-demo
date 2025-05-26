@@ -71,10 +71,7 @@ impl Render {
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 required_features: wgpu::Features::empty(),
-                #[cfg(not(target_arch = "wasm32"))]
                 required_limits: wgpu::Limits::default(),
-                #[cfg(target_arch = "wasm32")]
-                required_limits: wgpu::Limits::downlevel_webgl2_defaults(),
                 ..Default::default()
             })
             .await?;
