@@ -80,6 +80,8 @@ impl Default for AppConfig {
     }
 }
 
+/// 放在 AppHandler 的都是不需要游戏逻辑内处理的数据
+/// 放在 App 内的都是需要游戏逻辑内处理的
 pub struct AppHandler<T: App> {
     window: Option<Arc<Window>>,
     title: &'static str,

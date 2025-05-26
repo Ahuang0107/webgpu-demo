@@ -29,8 +29,6 @@ struct AppData {
     size: PhysicalSize<u32>,
     if_size_changed: bool,
     fps: Fps,
-    if_mask_follow_cursor: bool,
-    if_blur_follow_cursor: bool,
     /// 因为 web 上运行时，需要玩家点击了窗口后，才能初始化 AudioContext 所以需要检测第一次点击，重新初始化一遍 audio
     #[cfg(target_arch = "wasm32")]
     if_focused: bool,
@@ -149,8 +147,6 @@ impl App for AppData {
             // 默认为 true 确保渲染第一帧前会调整 surface 大小
             if_size_changed: true,
             fps: Fps::new(),
-            if_mask_follow_cursor: false,
-            if_blur_follow_cursor: false,
             #[cfg(target_arch = "wasm32")]
             if_focused: false,
             ui_cursor,
@@ -262,18 +258,6 @@ impl App for AppData {
                 }
                 KeyCode::ArrowDown => {
                     camera.transform.translation.y -= 1.0;
-                }
-                KeyCode::Digit0 => {
-                    self.if_mask_follow_cursor = false;
-                    self.if_blur_follow_cursor = false;
-                }
-                KeyCode::Digit1 => {
-                    self.if_mask_follow_cursor = true;
-                    self.if_blur_follow_cursor = false;
-                }
-                KeyCode::Digit2 => {
-                    self.if_mask_follow_cursor = false;
-                    self.if_blur_follow_cursor = true;
                 }
                 KeyCode::KeyT => {
                     self.scene

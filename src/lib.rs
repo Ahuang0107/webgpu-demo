@@ -1,12 +1,12 @@
-mod app;
 mod audio;
 mod fps;
+mod framework;
 mod render;
 mod start;
 
-pub use app::*;
 pub use audio::*;
 pub use fps::*;
+pub use framework::*;
 pub use render::*;
 pub use start::*;
 
