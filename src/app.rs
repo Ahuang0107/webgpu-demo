@@ -1,26 +1,16 @@
-use crate::{
-    run, App, AppConfig, Audio, BlendMode, Camera2D, Color, Fps, Render, Sprite, Transform,
-    PKG_NAME,
-};
+use crate::{App, AppConfig, Audio, BlendMode, Camera2D, Color, Fps, Render, Sprite, Transform};
 use glam::{Vec2, Vec3};
 use isometric_engine::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
 use wgpu::SurfaceError;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, KeyEvent, MouseButton};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::Window;
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
-pub fn start() {
-    run::<AppData>(PKG_NAME).expect("TODO: panic message");
-}
-
-struct AppData {
+pub struct AppData {
     config: AppConfig,
     render: Render,
     audio: Audio,
