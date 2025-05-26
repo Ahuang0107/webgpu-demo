@@ -1,3 +1,6 @@
+mod edit_mode;
+
+use super::assets::*;
 use crate::{App, AppConfig, Audio, BlendMode, Camera2D, Color, Fps, Render, Sprite, Transform};
 use glam::{Vec2, Vec3};
 use isometric_engine::*;
@@ -41,22 +44,10 @@ impl App for AppData {
             .expect("Failed to create render");
         let mut audio = Audio::default();
         audio.resume_audio_context();
-        audio.load_source(
-            "pickup",
-            include_bytes!("assets/audio/pickup_demo.ogg").into(),
-        );
-        audio.load_source(
-            "place",
-            include_bytes!("assets/audio/place_demo_2.ogg").into(),
-        );
-        audio.load_source(
-            "bgm",
-            include_bytes!("assets/audio/bgm/Carousel Dreams - The Soundlings.mp3").into(),
-        );
-        audio.load_source(
-            "ambient",
-            include_bytes!("assets/audio/ambient_sound_demo.ogg").into(),
-        );
+        audio.load_source("pickup", AUDIO_PICKUP.into());
+        audio.load_source("place", AUDIO_PLACE.into());
+        audio.load_source("bgm", AUDIO_BGM.into());
+        audio.load_source("ambient", AUDIO_AMBIENT.into());
         audio.play_sound("bgm");
         audio.play_sound("ambient");
 
@@ -69,8 +60,7 @@ impl App for AppData {
         camera.transform.scale.x = 0.5;
         camera.transform.scale.y = 0.5;
         camera.near = -2000.0;
-        let ui_cursor_image_handle =
-            render.load_texture_raw(include_bytes!("assets/ui-cursor.png"));
+        let ui_cursor_image_handle = render.load_texture_raw(UI_CURSOR);
         let ui_cursor = Sprite {
             transform: Transform::from_translation(Vec3::new(0.0, 0.0, 500.0)),
             texture_id: ui_cursor_image_handle,
@@ -78,10 +68,8 @@ impl App for AppData {
             ..Default::default()
         };
 
-        let scene_bytes = include_bytes!("assets/scenes/SideBoardScene.json");
-        let scene = Scene::from_bytes(scene_bytes);
-        let package_bytes = include_bytes!("assets/package/SideBoardSceneTotal.pkg");
-        let package = Package::unpack_from_bytes(package_bytes).unwrap();
+        let scene = Scene::from_bytes(SCENE_SIDEBOARD);
+        let package = Package::unpack_from_bytes(PACKAGE_SIDEBOARD).unwrap();
         let mut image_map: HashMap<MetaModel, u32> =
             HashMap::with_capacity(package.sprite_image_map.len());
         for (key, image) in package.sprite_image_map.iter() {
