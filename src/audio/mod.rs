@@ -8,7 +8,18 @@ use std::sync::Arc;
 pub struct Audio {
     stream_handle: Option<OutputStreamHandle>,
     audio_sources: HashMap<String, AudioSource>,
-    sinks: Slab<Sink>,
+    sinks: Slab<AudioSink>,
+}
+
+pub struct AudioSink {
+    source_key: String,
+    sink: Sink,
+}
+
+impl AudioSink {
+    pub fn set_volume(&self, volume: f32) {
+        self.sink.set_volume(volume);
+    }
 }
 
 impl Audio {
@@ -42,9 +53,12 @@ impl Audio {
         sink.append(source.decoder());
         sink.set_volume(volume);
         sink.play();
-        Some(self.sinks.insert(sink))
+        Some(self.sinks.insert(AudioSink {
+            source_key: source_key.to_string(),
+            sink,
+        }))
     }
-    pub fn get_sink(&self, key: usize) -> Option<&Sink> {
+    pub fn get_sink(&self, key: usize) -> Option<&AudioSink> {
         self.sinks.get(key)
     }
     pub fn clean_finished_sink(&mut self) {
@@ -65,5 +79,36 @@ impl AudioSource {
     }
     pub fn decoder(&self) -> Decoder<Cursor<Arc<[u8]>>> {
         Decoder::new(Cursor::new(self.bytes.clone())).unwrap()
+    }
+}
+
+impl isometric_engine::Audio for Audio {
+    fn play(&mut self, sound: &str) -> bool {
+        let mut volume = 1.0;
+        if sound == "bgm" || sound == "bgm2" {
+            volume = 0.4;
+        }
+        let result = self.play_sound_with_volume(sound, volume);
+        result.is_some()
+    }
+
+    fn pause(&mut self, sound: &str) -> bool {
+        for (_, sink) in self.sinks.iter() {
+            if sink.source_key.as_str() == sound {
+                sink.sink.pause();
+                return true;
+            }
+        }
+        false
+    }
+
+    fn resume(&mut self, sound: &str) -> bool {
+        for (_, sink) in self.sinks.iter() {
+            if sink.source_key.as_str() == sound {
+                sink.sink.play();
+                return true;
+            }
+        }
+        false
     }
 }

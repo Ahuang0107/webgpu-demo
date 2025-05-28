@@ -26,6 +26,8 @@ pub struct AppData {
     #[cfg(target_arch = "wasm32")]
     if_focused: bool,
     ui_cursor: Sprite,
+    bg: Sprite,
+    package: Package,
     scene: Scene,
     image_map: HashMap<MetaModel, u32>,
     cursor_pos: PhysicalPosition<f64>,
@@ -47,7 +49,9 @@ impl App for AppData {
         audio.load_source("pickup", AUDIO_PICKUP.into());
         audio.load_source("place", AUDIO_PLACE.into());
         audio.load_source("bgm", AUDIO_BGM.into());
+        audio.load_source("bgm2", AUDIO_BGM_2.into());
         audio.load_source("ambient", AUDIO_AMBIENT.into());
+        audio.load_source("record_press", AUDIO_RECORD_PRESS.into());
         audio.play_sound("bgm");
         audio.play_sound("ambient");
 
@@ -55,8 +59,8 @@ impl App for AppData {
             window.inner_size().width as f32,
             window.inner_size().height as f32,
         ));
-        camera.transform.translation.x = 500.0;
-        camera.transform.translation.y = 500.0;
+        camera.transform.translation.x = 620.0;
+        camera.transform.translation.y = 600.0;
         camera.transform.scale.x = 0.5;
         camera.transform.scale.y = 0.5;
         camera.near = -2000.0;
@@ -65,6 +69,13 @@ impl App for AppData {
             transform: Transform::from_translation(Vec3::new(0.0, 0.0, 500.0)),
             texture_id: ui_cursor_image_handle,
             anchor: Vec2::new(-0.5, 0.5),
+            ..Default::default()
+        };
+        let bg_image_handle = render.load_texture_raw(BG);
+        let bg = Sprite {
+            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
+            texture_id: bg_image_handle,
+            anchor: Vec2::new(-0.5, -0.5),
             ..Default::default()
         };
 
@@ -128,6 +139,8 @@ impl App for AppData {
             #[cfg(target_arch = "wasm32")]
             if_focused: false,
             ui_cursor,
+            bg,
+            package,
             scene,
             image_map,
             cursor_pos: PhysicalPosition::default(),
@@ -264,22 +277,17 @@ impl App for AppData {
         } else {
             0
         };
-        let sync_result = self
+        let _sync_result = self
             .scene
             .sync(
                 delta.as_micros() as u64,
                 [world_position.x as i32, world_position.y as i32],
                 click_type,
+                self.package.items.as_slice(),
+                &mut self.audio,
             )
             .expect("failed to sync scene");
         self.mouse_pressed.clear();
-
-        if sync_result.if_pickup_item {
-            self.audio.play_sound("pickup");
-        }
-        if sync_result.if_place_item {
-            self.audio.play_sound("place");
-        }
 
         let collect_sprites = self.scene.collect_sprites();
         let collect_sprite_masks = self.scene.collect_sprite_masks();
@@ -338,6 +346,7 @@ impl App for AppData {
         if self.size.width > 0 && self.size.height > 0 {
             let mut sprites: Vec<&Sprite> = self.sprites.iter().collect();
             sprites.push(&self.ui_cursor);
+            sprites.push(&self.bg);
             self.render.render(&self.camera, sprites.as_slice());
         }
         self.fps.update();
