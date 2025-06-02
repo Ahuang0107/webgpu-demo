@@ -14,7 +14,10 @@ pub struct Sprite {
     pub anchor: Vec2,
     /// Mask range
     pub mask: Option<[f32; 2]>,
+    /// 这里其实有点冲突，本来 color 还承担着 opacity 的作用
+    /// 但是如果是特殊的 color blend mode 模式，则图层本身的 opacity 和 color 的 opacity 没办法兼容
     pub color: Color,
+    pub color_blend_mode: BlendMode,
     pub blend_mode: BlendMode,
 }
 

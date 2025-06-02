@@ -3,6 +3,7 @@ mod assets;
 mod audio;
 mod fps;
 mod framework;
+mod input;
 mod render;
 mod utils;
 

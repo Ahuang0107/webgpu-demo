@@ -32,6 +32,12 @@ impl Default for Color {
     }
 }
 
+impl From<(u16, u8, u8)> for Color {
+    fn from((h, s, b): (u16, u8, u8)) -> Self {
+        Self::Hsb(HsbColor::new(h, s, b))
+    }
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct RgbaColor(U8Vec4);
 
@@ -52,49 +58,55 @@ impl From<[u8; 4]> for RgbaColor {
 pub struct HsbColor {
     /// 色相
     /// 0 - 359
-    pub hue: u16,
+    hue: u16,
     /// 饱和度
     /// 0 - 100
-    pub saturation: u8,
+    saturation: u8,
     /// 亮度
     /// 0 - 100
     ///
     /// = max(R,G,B)/255
-    pub brightness: u8,
+    brightness: u8,
 }
 
 impl HsbColor {
     #[inline]
-    pub fn new(mut hue: u16, mut saturation: u8, mut brightness: u8) -> Self {
-        if hue >= 360 {
-            hue = 0;
-        }
-        if saturation > 100 {
-            saturation = 100;
-        }
-        if brightness > 100 {
-            brightness = 100;
-        }
-        Self {
+    pub fn new(hue: u16, saturation: u8, brightness: u8) -> Self {
+        let mut result = Self {
             hue,
             saturation,
             brightness,
+        };
+        if result.hue >= 360 {
+            result.hue = 0;
         }
+        if result.saturation > 100 {
+            result.saturation = 100;
+        }
+        if result.brightness > 100 {
+            result.brightness = 100;
+        }
+        result
+    }
+
+    pub fn loop_hue(&mut self, hue: u16) {
+        self.hue += hue;
+        self.hue %= 360;
     }
 
     /// 注意 Photoshop 的 hsb 和 rgb 的转换中，比如 rgb=84,255,0 和 rgb=86,255,0 都对应 hsb=100,100,100
     /// 写 UT 的时候需要注意
     #[inline]
     pub fn as_rgba(&self) -> RgbaColor {
-        let hub = self.hue as f32;
+        let hue = self.hue as f32;
         let saturation = self.saturation as f32 / 100.0;
         let brightness = self.brightness as f32 / 100.0;
 
         let c = brightness * saturation;
-        let x = c * (1.0 - ((hub / 60.0) % 2.0 - 1.0).abs());
+        let x = c * (1.0 - ((hue / 60.0) % 2.0 - 1.0).abs());
         let m = brightness - c;
 
-        let interval = (self.hue as f32 / 60.0).floor();
+        let interval = (hue / 60.0).floor();
 
         let (r, g, b) = match interval as u8 {
             0 => (c, x, 0.0),

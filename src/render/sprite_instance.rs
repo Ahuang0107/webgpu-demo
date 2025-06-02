@@ -8,19 +8,21 @@ pub struct SpriteInstance {
     pub i_model_transpose: [Vec4; 3],
     pub i_uv_offset_scale: Vec4,
     pub color: Vec4,
+    pub color_blend_mode: u32,
     pub blend_mode: u32,
-    pub _padding: [u32; 3],
+    pub _padding: [u32; 2],
 }
 
 impl SpriteInstance {
-    const ATTRIBUTES: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![
+    const ATTRIBUTES: [wgpu::VertexAttribute; 8] = wgpu::vertex_attr_array![
         0 => Float32x4,
         1 => Float32x4,
         2 => Float32x4,
         3 => Float32x4,
         4 => Float32x4,
         5 => Uint32,
-        6 => Uint32x3,
+        6 => Uint32,
+        7 => Uint32x2,
     ];
     pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
         wgpu::VertexBufferLayout {
@@ -34,7 +36,8 @@ impl SpriteInstance {
         transform: &Affine3A,
         uv_offset_scale: &Vec4,
         color: Color,
-        blend_mode: BlendMode,
+        color_blend_mode: BlendMode,
+        background_blend_mode: BlendMode,
     ) -> Self {
         let transpose_model_3x3 = transform.matrix3.transpose();
         Self {
@@ -45,8 +48,9 @@ impl SpriteInstance {
             ],
             i_uv_offset_scale: *uv_offset_scale,
             color: color.as_vec4(),
-            blend_mode: blend_mode as u32,
-            _padding: [0, 0, 0],
+            color_blend_mode: color_blend_mode as u32,
+            blend_mode: background_blend_mode as u32,
+            _padding: [0, 0],
         }
     }
 }

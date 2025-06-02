@@ -7,7 +7,7 @@ pub static AUDIO_AMBIENT: &'static [u8] = include_bytes!("audio/ambient_sound_de
 pub static AUDIO_RECORD_PRESS: &'static [u8] = include_bytes!("audio/record_press.ogg");
 
 pub static UI_CURSOR: &'static [u8] = include_bytes!("ui-cursor.png");
-pub static BG: &'static [u8] = include_bytes!("BG.png");
+pub static BG_CHECKER: &'static [u8] = include_bytes!("checker.png");
 
 pub static SCENE_SIDEBOARD: &'static [u8] = include_bytes!("scenes/SideBoardScene.json");
 pub static PACKAGE_SIDEBOARD: &'static [u8] = include_bytes!("package/SideBoardSceneTotal.pkg");

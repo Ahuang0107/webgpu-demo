@@ -21,8 +21,9 @@ struct VertexInput {
     @location(2) i_model_transpose_col2: vec4<f32>,
     @location(3) i_uv_offset_scale: vec4<f32>,
     @location(4) color: vec4<f32>,
-    @location(5) blend_mode: u32,
-    @location(6) _padding: vec3<u32>,
+    @location(5) color_blend_mode: u32,
+    @location(6) blend_mode: u32,
+    @location(7) _padding: vec2<u32>,
 };
 
 struct VertexOutput {

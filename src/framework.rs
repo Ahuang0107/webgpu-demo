@@ -4,10 +4,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 use wgpu::WasmNotSend;
 use winit::application::ApplicationHandler;
-use winit::dpi::{PhysicalPosition, PhysicalSize, Size};
-use winit::event::{
-    DeviceEvent, ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent,
-};
+use winit::dpi::{PhysicalSize, Size};
+use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
 
@@ -32,27 +30,7 @@ pub trait App {
     /// 如果窗口 size 发生变化就立即调整 surface 大小, 会导致缩放浏览器窗口大小时渲染画面闪烁。
     fn set_window_resized(&mut self, new_size: PhysicalSize<u32>);
 
-    /// 键盘事件
-    fn keyboard_input(&mut self, _event: &KeyEvent) -> bool {
-        false
-    }
-
-    fn mouse_click(&mut self, _state: ElementState, _button: MouseButton) -> bool {
-        false
-    }
-
-    fn mouse_wheel(&mut self, _delta: MouseScrollDelta, _phase: TouchPhase) -> bool {
-        false
-    }
-
-    fn cursor_move(&mut self, _position: PhysicalPosition<f64>) -> bool {
-        false
-    }
-
-    /// 鼠标移动/触摸事件
-    fn device_input(&mut self, _event: &DeviceEvent) -> bool {
-        false
-    }
+    fn on_window_input(&mut self, event: &WindowEvent);
 
     /// 更新渲染数据
     fn update(&mut self, _dt: instant::Duration) {}
@@ -216,7 +194,7 @@ impl<T: App + 'static> ApplicationHandler for AppHandler<T> {
         self.last_render_time = instant::Instant::now();
 
         let mut window_attributes = Window::default_attributes();
-        window_attributes.inner_size = Some(Size::Physical(PhysicalSize::new(1920, 1080)));
+        window_attributes.inner_size = Some(Size::Physical(PhysicalSize::new(1280, 720)));
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
         self.window = Some(window.clone());
         self.config_window();
@@ -302,6 +280,9 @@ impl<T: App + 'static> ApplicationHandler for AppHandler<T> {
 
             self.config.decorations = new_config.decorations;
         }
+
+        app.on_window_input(&event);
+
         match event {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
@@ -322,22 +303,6 @@ impl<T: App + 'static> ApplicationHandler for AppHandler<T> {
                 log::info!("Window resized(fixed): {:?}", physical_size);
 
                 app.set_window_resized(physical_size);
-            }
-            WindowEvent::KeyboardInput { event, .. } => {
-                // 键盘事件
-                let _ = app.keyboard_input(&event);
-            }
-            WindowEvent::MouseWheel { delta, phase, .. } => {
-                // 鼠标滚轮事件
-                let _ = app.mouse_wheel(delta, phase);
-            }
-            WindowEvent::MouseInput { button, state, .. } => {
-                // 鼠标点击事件
-                let _ = app.mouse_click(state, button);
-            }
-            WindowEvent::CursorMoved { position, .. } => {
-                // 鼠标移动事件
-                let _ = app.cursor_move(position);
             }
             WindowEvent::RedrawRequested => {
                 // surface 重绘事件
@@ -372,7 +337,7 @@ impl<T: App + 'static> ApplicationHandler for AppHandler<T> {
             unsafe {
                 let mut point = POINT { x: 0, y: 0 };
                 if GetCursorPos(&mut point).is_ok() {
-                    let _ = app.cursor_move(PhysicalPosition::new(point.x as f64, point.y as f64));
+                    // let _ = app.cursor_move(PhysicalPosition::new(point.x as f64, point.y as f64));
                 }
             }
         }

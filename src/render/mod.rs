@@ -525,6 +525,7 @@ impl Render {
                     &sprite.calculate_transform(*image_size),
                     &sprite.calculate_uv_offset_scale(*image_size),
                     sprite.color,
+                    sprite.color_blend_mode,
                     sprite.blend_mode,
                 );
                 sprite_instances.push(sprite_instance);
