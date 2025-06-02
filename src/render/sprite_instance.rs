@@ -6,8 +6,8 @@ use glam::{Affine3A, Vec4};
 pub struct SpriteInstance {
     // Affine 4x3 transposed to 3x4
     pub i_model_transpose: [Vec4; 3],
-    pub i_uv_offset_scale: [f32; 4],
-    pub color: [f32; 4],
+    pub i_uv_offset_scale: Vec4,
+    pub color: Vec4,
     pub blend_mode: u32,
     pub _padding: [u32; 3],
 }
@@ -43,8 +43,8 @@ impl SpriteInstance {
                 transpose_model_3x3.y_axis.extend(transform.translation.y),
                 transpose_model_3x3.z_axis.extend(transform.translation.z),
             ],
-            i_uv_offset_scale: uv_offset_scale.to_array(),
-            color: color.to_f32_array(),
+            i_uv_offset_scale: *uv_offset_scale,
+            color: color.as_vec4(),
             blend_mode: blend_mode as u32,
             _padding: [0, 0, 0],
         }

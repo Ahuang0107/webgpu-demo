@@ -4,6 +4,7 @@ mod audio;
 mod fps;
 mod framework;
 mod render;
+mod utils;
 
 pub use app::*;
 pub use audio::*;
