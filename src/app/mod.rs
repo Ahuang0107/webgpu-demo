@@ -3,7 +3,7 @@ mod edit_mode;
 use super::assets::*;
 use crate::input::Input;
 use crate::utils::collect_sprites;
-use crate::{App, AppConfig, Audio, Camera2D, Color, Fps, Render, Sprite, Transform};
+use crate::{App, AppConfig, Audio, Camera2D, Color, Fps, Render, ScreenRepeat, Sprite, Transform};
 use glam::{Vec2, Vec3};
 use isometric_engine::*;
 use std::collections::HashMap;
@@ -22,7 +22,7 @@ pub struct AppData {
     audio: Audio,
     camera: Camera2D,
     sprites: Vec<Sprite>,
-    bg_sprites: Vec<Sprite>,
+    screen_repeat: ScreenRepeat,
     size: PhysicalSize<u32>,
     if_size_changed: bool,
     fps: Fps,
@@ -61,8 +61,7 @@ impl App for AppData {
         ));
         camera.transform.translation.x = 620.0;
         camera.transform.translation.y = 600.0;
-        // camera.transform.scale.x = 0.5;
-        // camera.transform.scale.y = 0.5;
+        camera.zoom_in();
         camera.near = -2000.0;
         let ui_cursor_image_handle = render.load_texture_raw(UI_CURSOR);
         let ui_cursor = Sprite {
@@ -80,24 +79,12 @@ impl App for AppData {
             image_map.insert(*key, render.load_texture(image));
         }
 
-        let bg_checker_image_handle = render.load_texture_raw(BG_CHECKER);
-        let mut bg_sprites = Vec::new();
-        let mut x = 0.0;
-        for _ in 0..20 {
-            let mut y = 0.0;
-            for _ in 0..20 {
-                bg_sprites.push(Sprite {
-                    transform: Transform::from_translation(Vec3::new(x, y, 0.0)),
-                    texture_id: bg_checker_image_handle,
-                    anchor: Vec2::new(-0.5, -0.5),
-                    color: Color::from((107, 13, 56)),
-                    color_blend_mode: crate::render::BlendMode::Multiply,
-                    ..Default::default()
-                });
-                y += 64.0;
-            }
-            x += 64.0;
-        }
+        let screen_repeat = ScreenRepeat {
+            texture_id: render.load_texture_raw(BG_CHECKER),
+            offset: Vec2::ZERO,
+            scale: 1.0 / camera.transform.scale.truncate(),
+            color: Color::from((107, 13, 56)),
+        };
 
         Self {
             config: AppConfig::default(),
@@ -106,7 +93,7 @@ impl App for AppData {
             audio,
             camera,
             sprites: Vec::new(),
-            bg_sprites,
+            screen_repeat,
             size: window.inner_size(),
             // 默认为 true 确保渲染第一帧前会调整 surface 大小
             if_size_changed: true,
@@ -180,25 +167,11 @@ impl App for AppData {
             .unwrap();
             log::info!("Saved scene");
         }
-        if self.input.if_keyboard_pressed(&KeyCode::KeyC) {
-            for bg_sprite in self.bg_sprites.iter_mut() {
-                match &mut bg_sprite.color {
-                    Color::Hsb(color) => {
-                        color.loop_hue(5);
-                    }
-                    _ => {}
-                }
-            }
-        }
         if self.input.if_keyboard_just_pressed(&KeyCode::KeyZ) {
-            // NOTE 这里不能修改 z 的 scale 因为这会影响到 near 和 far
-            //  这在 3D 游戏中是需要逻辑但是 2D 不需要
-            camera.transform.scale.x -= 0.1;
-            camera.transform.scale.y -= 0.1;
+            camera.zoom_in();
         }
         if self.input.if_keyboard_just_pressed(&KeyCode::KeyX) {
-            camera.transform.scale.x += 0.1;
-            camera.transform.scale.y += 0.1;
+            camera.zoom_out();
         }
         if self.input.if_keyboard_just_pressed(&KeyCode::ArrowLeft) {
             camera.transform.translation.x -= 1.0;
@@ -220,6 +193,9 @@ impl App for AppData {
         if self.input.if_keyboard_just_pressed(&KeyCode::KeyP) {
             self.audio.play_sound_with_volume("bgm", 0.4);
         }
+
+        camera.update_anima(delta.as_millis() as u64);
+        self.screen_repeat.scale = 1.0 / self.camera.transform.scale.truncate();
 
         let world_position = self
             .camera
@@ -271,10 +247,8 @@ impl App for AppData {
         if self.size.width > 0 && self.size.height > 0 {
             let mut sprites: Vec<&Sprite> = self.sprites.iter().collect();
             sprites.push(&self.ui_cursor);
-            for bg_sprite in self.bg_sprites.iter() {
-                sprites.push(&bg_sprite);
-            }
-            self.render.render(&self.camera, sprites.as_slice());
+            self.render
+                .render(&self.camera, sprites.as_slice(), Some(&self.screen_repeat));
         }
         self.fps.update();
         #[cfg(feature = "profiling")]

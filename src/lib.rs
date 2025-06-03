@@ -1,6 +1,7 @@
 mod app;
 mod assets;
 mod audio;
+mod easing;
 mod fps;
 mod framework;
 mod input;
@@ -9,6 +10,7 @@ mod utils;
 
 pub use app::*;
 pub use audio::*;
+pub use easing::*;
 pub use fps::*;
 pub use framework::*;
 pub use render::*;

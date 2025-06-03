@@ -1,4 +1,4 @@
-use crate::{Rect, Transform};
+use crate::{EasingAnimator, Rect, Transform};
 use glam::{Mat4, Vec2, Vec3, Vec4};
 
 pub struct Camera2D {
@@ -22,6 +22,12 @@ pub struct Camera2D {
     /// sprite 的 z 越大，表示约 near（靠近镜头）
     pub near: f32,
     pub far: f32,
+    /// 因为镜头缩放动画需要完美像素需要的缩放必须是整数，但是缩放过程中一定是有小数的
+    /// 所有缩放需要 pixel_zoom 和 scale_animator 和 transform.scale 共同作用
+    ///
+    /// 限制放大倍率只有 x1 x2 x4 x8
+    pub pixel_zoom: u8,
+    pub scale_animator: EasingAnimator,
 }
 
 impl Camera2D {
@@ -33,6 +39,39 @@ impl Camera2D {
             transform: Transform::IDENTITY,
             near: -1000.0,
             far: 1.0,
+            pixel_zoom: 1,
+            scale_animator: EasingAnimator::default(),
+        }
+    }
+
+    pub fn zoom_in(&mut self) {
+        if self.pixel_zoom < 8 {
+            if self.scale_animator.if_finished() {
+                // NOTE 确保在可以执行动画的情况下再修改 pixel_zoom
+                self.pixel_zoom *= 2;
+                self.scale_animator =
+                    EasingAnimator::new(self.transform.scale.x, 1.0 / self.pixel_zoom as f32, 500);
+            }
+        }
+    }
+
+    pub fn zoom_out(&mut self) {
+        if self.pixel_zoom > 1 {
+            if self.scale_animator.if_finished() {
+                self.pixel_zoom /= 2;
+                self.scale_animator =
+                    EasingAnimator::new(self.transform.scale.x, 1.0 / self.pixel_zoom as f32, 500);
+            }
+        }
+    }
+
+    pub fn update_anima(&mut self, delta_ms: u64) {
+        if !self.scale_animator.if_finished() {
+            let result = self.scale_animator.update(delta_ms);
+            // NOTE 这里不能修改 z 的 scale 因为这会影响到 near 和 far
+            //  这在 3D 游戏中是需要逻辑但是 2D 不需要
+            self.transform.scale.x = result;
+            self.transform.scale.y = result;
         }
     }
 

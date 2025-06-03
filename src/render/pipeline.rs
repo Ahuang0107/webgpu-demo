@@ -1,9 +1,9 @@
-pub fn create_pipeline(
+pub fn create_pipeline<'a>(
     label: &str,
     device: &wgpu::Device,
     bind_group_layouts: &[&wgpu::BindGroupLayout],
     shader: &wgpu::ShaderModule,
-    vertex_buffer_layout: wgpu::VertexBufferLayout,
+    vertex_buffer_layouts: &'a [wgpu::VertexBufferLayout<'a>],
     target: wgpu::ColorTargetState,
     depth_stencil: Option<wgpu::DepthStencilState>,
 ) -> wgpu::RenderPipeline {
@@ -20,7 +20,7 @@ pub fn create_pipeline(
             module: shader,
             entry_point: Some("vs_main"),
             compilation_options: wgpu::PipelineCompilationOptions::default(),
-            buffers: &[vertex_buffer_layout],
+            buffers: vertex_buffer_layouts,
         },
         fragment: Some(wgpu::FragmentState {
             module: shader,

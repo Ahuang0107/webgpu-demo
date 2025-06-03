@@ -4,6 +4,7 @@ mod color;
 mod pipeline;
 mod rect;
 mod render_item;
+mod screen_repeat;
 mod sprite;
 mod sprite_instance;
 mod transform;
@@ -14,6 +15,7 @@ pub use color::*;
 pub use pipeline::*;
 pub use rect::*;
 pub use render_item::*;
+pub use screen_repeat::*;
 pub use sprite::*;
 pub use sprite_instance::*;
 pub use transform::*;
@@ -31,7 +33,7 @@ pub struct Render {
     device: wgpu::Device,
     queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
-    view_uniform_bind_group_layout: wgpu::BindGroupLayout,
+    uniform_bind_group_layout: wgpu::BindGroupLayout,
     texture_bind_group_layout: wgpu::BindGroupLayout,
     mask_texture: wgpu::Texture,
     grab_texture: wgpu::Texture,
@@ -41,6 +43,7 @@ pub struct Render {
     blur_pipeline: wgpu::RenderPipeline,
     mask_start_pipeline: wgpu::RenderPipeline,
     mask_end_pipeline: wgpu::RenderPipeline,
+    screen_repeat_pipeline: wgpu::RenderPipeline,
     textures: HashMap<u32, (Vec2, wgpu::BindGroup)>,
 }
 
@@ -90,7 +93,7 @@ impl Render {
             surface.configure(&device, &config);
         }
 
-        let view_uniform_bind_group_layout =
+        let uniform_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
@@ -178,9 +181,9 @@ impl Render {
         let render_pipeline = create_pipeline(
             "Render Pipeline",
             &device,
-            &[&view_uniform_bind_group_layout, &texture_bind_group_layout],
+            &[&uniform_bind_group_layout, &texture_bind_group_layout],
             &shader,
-            SpriteInstance::desc(),
+            &[SpriteInstance::desc()],
             wgpu::ColorTargetState {
                 format: TEXTURE_FORMAT,
                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
@@ -208,12 +211,12 @@ impl Render {
             "Blend Mode Pipeline",
             &device,
             &[
-                &view_uniform_bind_group_layout,
+                &uniform_bind_group_layout,
                 &texture_bind_group_layout,
                 &texture_bind_group_layout,
             ],
             &blend_mode_shader,
-            SpriteInstance::desc(),
+            &[SpriteInstance::desc()],
             wgpu::ColorTargetState {
                 format: TEXTURE_FORMAT,
                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
@@ -240,12 +243,12 @@ impl Render {
             "Blur Pipeline",
             &device,
             &[
-                &view_uniform_bind_group_layout,
+                &uniform_bind_group_layout,
                 &texture_bind_group_layout,
                 &texture_bind_group_layout,
             ],
             &blur_shader,
-            SpriteInstance::desc(),
+            &[SpriteInstance::desc()],
             wgpu::ColorTargetState {
                 format: TEXTURE_FORMAT,
                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
@@ -271,9 +274,9 @@ impl Render {
         let mask_start_pipeline = create_pipeline(
             "Mask Start Pipeline",
             &device,
-            &[&view_uniform_bind_group_layout, &texture_bind_group_layout],
+            &[&uniform_bind_group_layout, &texture_bind_group_layout],
             &mask_shader,
-            SpriteInstance::desc(),
+            &[SpriteInstance::desc()],
             wgpu::ColorTargetState {
                 format: config.format,
                 blend: None,
@@ -298,9 +301,9 @@ impl Render {
         let mask_end_pipeline = create_pipeline(
             "Mask End Pipeline",
             &device,
-            &[&view_uniform_bind_group_layout, &texture_bind_group_layout],
+            &[&uniform_bind_group_layout, &texture_bind_group_layout],
             &mask_shader,
-            SpriteInstance::desc(),
+            &[SpriteInstance::desc()],
             wgpu::ColorTargetState {
                 format: config.format,
                 blend: None,
@@ -322,13 +325,28 @@ impl Render {
                 bias: Default::default(),
             }),
         );
+        let screen_repeat_shader =
+            device.create_shader_module(wgpu::include_wgsl!("screen_repeat_shader.wgsl"));
+        let screen_repeat_pipeline = create_pipeline(
+            "Screen Repeat Pipeline",
+            &device,
+            &[&uniform_bind_group_layout, &texture_bind_group_layout],
+            &screen_repeat_shader,
+            &[],
+            wgpu::ColorTargetState {
+                format: TEXTURE_FORMAT,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            },
+            None,
+        );
 
         Ok(Render {
             surface,
             device,
             queue,
             config,
-            view_uniform_bind_group_layout,
+            uniform_bind_group_layout,
             texture_bind_group_layout,
             mask_texture,
             grab_texture,
@@ -338,6 +356,7 @@ impl Render {
             blur_pipeline,
             mask_start_pipeline,
             mask_end_pipeline,
+            screen_repeat_pipeline,
             textures: HashMap::new(),
         })
     }
@@ -466,7 +485,12 @@ impl Render {
         );
         key
     }
-    pub fn render(&mut self, camera: &Camera2D, sprites: &[&Sprite]) {
+    pub fn render(
+        &mut self,
+        camera: &Camera2D,
+        sprites: &[&Sprite],
+        screen_repeat: Option<&ScreenRepeat>,
+    ) {
         #[cfg(feature = "profiling")]
         profiling::scope!("Create Frame View");
         let frame = self
@@ -491,7 +515,7 @@ impl Render {
                     label: None,
                 });
         let view_uniform_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &self.view_uniform_bind_group_layout,
+            layout: &self.uniform_bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: view_uniform_buffer.as_entire_binding(),
@@ -585,6 +609,49 @@ impl Render {
         radsort::sort_by_key(&mut render_items, |item| (item.sort_key(), item.type_key()));
 
         {
+            if let Some(screen_repeat) = screen_repeat {
+                if let Some((_, texture)) = self.textures.get(&screen_repeat.texture_id) {
+                    let screen_repeat_uniform = screen_repeat.get_uniform();
+                    let screen_repeat_uniform_buffer =
+                        self.device
+                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                contents: bytemuck::cast_slice(&[screen_repeat_uniform]),
+                                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                                label: None,
+                            });
+                    let screen_repeat_uniform_bind_group =
+                        self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                            layout: &self.uniform_bind_group_layout,
+                            entries: &[wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: screen_repeat_uniform_buffer.as_entire_binding(),
+                            }],
+                            label: None,
+                        });
+
+                    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("Render Pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &frame_view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                    });
+                    render_pass.set_pipeline(&self.screen_repeat_pipeline);
+                    render_pass.set_bind_group(0, &screen_repeat_uniform_bind_group, &[]);
+                    render_pass.set_bind_group(1, texture, &[]);
+                    render_pass.draw(0..6_u32, 0..1);
+                }
+            }
+        }
+
+        {
             #[cfg(feature = "profiling")]
             profiling::scope!("Begin Render Pass");
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -593,12 +660,7 @@ impl Render {
                     view: &frame_view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 220.0 / 255.0,
-                            g: 215.0 / 255.0,
-                            b: 203.0 / 255.0,
-                            a: 1.0,
-                        }),
+                        load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
                     },
                 })],
