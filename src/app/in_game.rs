@@ -6,11 +6,13 @@ use glam::Vec2;
 use isometric_engine::{MetaModel, Package, Scene, SerdeFrom};
 use std::collections::HashMap;
 use std::time::Duration;
+use winit::dpi::PhysicalSize;
 use winit::event::MouseButton;
 use winit::keyboard::KeyCode;
 
 #[derive(Debug, Default)]
 pub struct InGame {
+    camera: Camera2D,
     sprites: Vec<Sprite>,
     screen_repeat: ScreenRepeat,
     package: Option<Package>,
@@ -19,7 +21,15 @@ pub struct InGame {
 }
 
 impl InGame {
-    pub fn new(render: &Render, texture_store: &mut TextureStore, camera: &mut Camera2D) -> InGame {
+    pub fn new(
+        render: &Render,
+        texture_store: &mut TextureStore,
+        window_size: PhysicalSize<u32>,
+    ) -> InGame {
+        let mut camera = Camera2D::new(Vec2::new(
+            window_size.width as f32,
+            window_size.height as f32,
+        ));
         camera.set_zoom(2);
 
         let screen_repeat = ScreenRepeat {
@@ -29,17 +39,9 @@ impl InGame {
             color: Color::from((107, 13, 56)),
         };
 
-        InGame {
-            sprites: Vec::new(),
-            screen_repeat,
-            package: None,
-            scene: None,
-            image_map: HashMap::default(),
-        }
-    }
-
-    pub fn load_scene(&mut self, render: &Render, texture_store: &mut TextureStore) {
         let scene = Scene::from_bytes(SCENE_SIDEBOARD);
+        camera.transform.translation.x = scene.size()[0] as f32 / 2.0;
+        camera.transform.translation.y = scene.size()[1] as f32 / 2.0;
         let package = Package::unpack_from_bytes(PACKAGE_SIDEBOARD).unwrap();
         let mut image_map: HashMap<MetaModel, AssetsId> =
             HashMap::with_capacity(package.sprite_image_map.len());
@@ -47,16 +49,30 @@ impl InGame {
             image_map.insert(*key, texture_store.load_texture(render, image));
         }
 
-        unimplemented!()
+        InGame {
+            camera,
+            sprites: Vec::new(),
+            screen_repeat,
+            package: Some(package),
+            scene: Some(scene),
+            image_map,
+        }
     }
 
-    pub fn update(
-        &mut self,
-        delta: Duration,
-        input: &Input,
-        audio: &mut Audio,
-        camera: &mut Camera2D,
-    ) {
+    pub fn resize(&mut self, window_size: PhysicalSize<u32>) {
+        self.camera.viewport_size = (window_size.width as f32, window_size.height as f32).into();
+    }
+
+    pub fn update(&mut self, delta: Duration, input: &Input, audio: &mut Audio) {
+        let cursor_world_pos = self
+            .camera
+            .viewport_to_world(Vec2::new(
+                input.cursor_pos().x as f32,
+                input.cursor_pos().y as f32,
+            ))
+            .truncate();
+
+        let camera = &mut self.camera;
         if input.if_keyboard_just_pressed(&KeyCode::KeyZ) {
             camera.zoom_in();
         }
@@ -101,10 +117,7 @@ impl InGame {
             let _sync_result = scene
                 .sync(
                     delta.as_micros() as u64,
-                    [
-                        input.cursor_world_pos().x as i32,
-                        input.cursor_world_pos().y as i32,
-                    ],
+                    [cursor_world_pos.x as i32, cursor_world_pos.y as i32],
                     click_type,
                     package.items.as_slice(),
                     audio,
@@ -115,10 +128,10 @@ impl InGame {
         }
     }
 
-    pub fn render(&self, render: &Render, texture_store: &TextureStore, camera: &Camera2D) {
+    pub fn render(&self, render: &Render, texture_store: &TextureStore) {
         render.render(
             texture_store,
-            camera,
+            &self.camera,
             &self.sprites.iter().collect(),
             Some(&self.screen_repeat),
         );

@@ -1,4 +1,3 @@
-use glam::Vec2;
 use std::collections::HashMap;
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton, WindowEvent};
@@ -8,7 +7,6 @@ use winit::keyboard::{KeyCode, PhysicalKey};
 pub struct Input {
     keyboard_inputs: HashMap<KeyCode, KeyState>,
     cursor_pos: PhysicalPosition<f64>,
-    cursor_world_pos: Vec2,
     mouse_inputs: HashMap<MouseButton, KeyState>,
 }
 
@@ -22,14 +20,6 @@ pub enum KeyState {
 impl Input {
     pub fn cursor_pos(&self) -> &PhysicalPosition<f64> {
         &self.cursor_pos
-    }
-
-    pub fn set_cursor_world_pos(&mut self, cursor_world_pos: Vec2) {
-        self.cursor_world_pos = cursor_world_pos;
-    }
-
-    pub fn cursor_world_pos(&self) -> &Vec2 {
-        &self.cursor_world_pos
     }
 
     pub fn if_keyboard_pressed(&self, key_code: &KeyCode) -> bool {

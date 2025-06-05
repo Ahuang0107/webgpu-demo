@@ -6,7 +6,7 @@ use super::assets::*;
 use crate::app::in_game::InGame;
 use crate::app::main_menu::MainMenu;
 use crate::input::Input;
-use crate::{App, AppConfig, Audio, Camera2D, Fps, Render, Sprite, TextureStore, Transform};
+use crate::{App, AppConfig, Audio, Fps, Render, Sprite, TextureStore, Transform};
 use glam::{Vec2, Vec3};
 use std::sync::Arc;
 use std::time::Duration;
@@ -22,7 +22,6 @@ pub struct AppData {
     render: Render,
     texture_store: TextureStore,
     audio: Audio,
-    camera: Camera2D,
     size: PhysicalSize<u32>,
     if_size_changed: bool,
     fps: Fps,
@@ -36,7 +35,7 @@ pub struct AppData {
     in_game: InGame,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Eq, PartialEq)]
 pub enum AppState {
     #[default]
     MainMenu,
@@ -59,11 +58,6 @@ impl App for AppData {
         // audio.play_sound("bgm");
         // audio.play_sound("ambient");
 
-        let mut camera = Camera2D::new(Vec2::new(
-            window.inner_size().width as f32,
-            window.inner_size().height as f32,
-        ));
-
         let mut texture_store = TextureStore::default();
 
         let ui_cursor_image_handle = texture_store.load_texture_raw(&render, UI_CURSOR);
@@ -74,7 +68,7 @@ impl App for AppData {
             ..Default::default()
         };
 
-        let main_menu = MainMenu::new(&render, &mut texture_store, &mut camera);
+        let main_menu = MainMenu::new(&render, &mut texture_store, window.inner_size());
 
         Self {
             config: AppConfig::default(),
@@ -82,7 +76,6 @@ impl App for AppData {
             render,
             texture_store,
             audio,
-            camera,
             size: window.inner_size(),
             // 默认为 true 确保渲染第一帧前会调整 surface 大小
             if_size_changed: true,
@@ -155,29 +148,21 @@ impl App for AppData {
             self.audio.play_sound_with_volume("bgm", 0.4);
         }
 
-        // TODO 需要支持基于屏幕坐标来渲染 ui
-        //  同时每个场景应该有自己的 camera 而不是公用一个 camera
-        // let world_position = self
-        //     .camera
-        //     .viewport_to_world(Vec2::new(
-        //         self.input.cursor_pos().x as f32,
-        //         self.input.cursor_pos().y as f32,
-        //     ))
-        //     .truncate();
-        // self.ui_cursor.transform.translation.x = world_position.x;
-        // self.ui_cursor.transform.translation.y = world_position.y;
-
         match self.app_state {
             AppState::MainMenu => {
-                if self.input.if_keyboard_just_pressed(&KeyCode::KeyS) {
-                    self.next_app_state = Some(AppState::InGame);
-                    self.in_game =
-                        InGame::new(&self.render, &mut self.texture_store, &mut self.camera);
+                self.main_menu.update(
+                    delta,
+                    &self.input,
+                    &mut self.audio,
+                    &self.texture_store,
+                    &mut self.next_app_state,
+                );
+                if self.next_app_state == Some(AppState::InGame) {
+                    self.in_game = InGame::new(&self.render, &mut self.texture_store, self.size);
                 }
             }
             AppState::InGame => {
-                self.in_game
-                    .update(delta, &self.input, &mut self.audio, &mut self.camera);
+                self.in_game.update(delta, &self.input, &mut self.audio);
             }
         }
 
@@ -188,7 +173,8 @@ impl App for AppData {
         #[cfg(feature = "profiling")]
         profiling::scope!("Render Frame");
         if self.if_size_changed {
-            self.camera.viewport_size = (self.size.width as f32, self.size.height as f32).into();
+            self.main_menu.resize(self.size);
+            self.in_game.resize(self.size);
             // NOTE 之前把 surface_configure 放在这里，发现缩放窗口时会卡顿，于是就移到了外面，每帧都重新 surface_configure
             //  但是后来发现有性能问题，帧率一直很低，只有 200-300 FPS，远低于 bevy 的性能
             //  于是用 Tracy Profiler 测试了一下，发现每帧大部分时间都花在了 surface_configure 上（3ms左右）
@@ -202,12 +188,10 @@ impl App for AppData {
         if self.size.width > 0 && self.size.height > 0 {
             match self.app_state {
                 AppState::MainMenu => {
-                    self.main_menu
-                        .render(&self.render, &self.texture_store, &self.camera);
+                    self.main_menu.render(&self.render, &self.texture_store);
                 }
                 AppState::InGame => {
-                    self.in_game
-                        .render(&self.render, &self.texture_store, &self.camera);
+                    self.in_game.render(&self.render, &self.texture_store);
                 }
             }
         }
