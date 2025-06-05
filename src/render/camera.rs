@@ -18,6 +18,7 @@ pub struct Camera2D {
     /// point of the viewport centered.
     ///
     /// 来自 bevy 的 OrthographicProjection 中的 viewport_origin
+    /// 目前来看应该始终保持 [0.5, 0.5] 不会有其他情况
     pub viewport_origin: Vec2,
     pub viewport_size: Vec2,
     pub transform: Transform,
