@@ -1,9 +1,10 @@
+use crate::assets::AssetsId;
 use crate::{BlendMode, Color, Sprite, Transform};
 use glam::{Vec2, Vec3};
 use isometric_engine::{MetaModel, Scene};
 use std::collections::HashMap;
 
-pub fn collect_sprites(scene: &Scene, image_map: &HashMap<MetaModel, u32>) -> Vec<Sprite> {
+pub fn collect_sprites(scene: &Scene, image_map: &HashMap<MetaModel, AssetsId>) -> Vec<Sprite> {
     let collect_sprites = scene.collect_sprites();
     let collect_sprite_masks = scene.collect_sprite_masks();
     let mut sprites: Vec<Sprite> =

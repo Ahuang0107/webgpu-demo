@@ -1,6 +1,8 @@
 use crate::{EasingAnimator, Rect, Transform};
 use glam::{Mat4, Vec2, Vec3, Vec4};
+use std::time::Duration;
 
+#[derive(Debug, Default)]
 pub struct Camera2D {
     /// Specifies the origin of the viewport as a normalized position from 0 to 1, where (0, 0) is the bottom left
     /// and (1, 1) is the top right. This determines where the camera's position sits inside the viewport.
@@ -37,7 +39,7 @@ impl Camera2D {
             viewport_origin: Vec2::splat(0.5),
             viewport_size,
             transform: Transform::IDENTITY,
-            near: -1000.0,
+            near: -2000.0,
             far: 1.0,
             pixel_zoom: 1,
             scale_animator: EasingAnimator::default(),
@@ -49,8 +51,11 @@ impl Camera2D {
             if self.scale_animator.if_finished() {
                 // NOTE 确保在可以执行动画的情况下再修改 pixel_zoom
                 self.pixel_zoom *= 2;
-                self.scale_animator =
-                    EasingAnimator::new(self.transform.scale.x, 1.0 / self.pixel_zoom as f32, 500);
+                self.scale_animator = EasingAnimator::new(
+                    self.transform.scale.x,
+                    1.0 / self.pixel_zoom as f32,
+                    Duration::from_millis(500),
+                );
             }
         }
     }
@@ -59,15 +64,24 @@ impl Camera2D {
         if self.pixel_zoom > 1 {
             if self.scale_animator.if_finished() {
                 self.pixel_zoom /= 2;
-                self.scale_animator =
-                    EasingAnimator::new(self.transform.scale.x, 1.0 / self.pixel_zoom as f32, 500);
+                self.scale_animator = EasingAnimator::new(
+                    self.transform.scale.x,
+                    1.0 / self.pixel_zoom as f32,
+                    Duration::from_millis(500),
+                );
             }
         }
     }
 
-    pub fn update_anima(&mut self, delta_ms: u64) {
+    pub fn set_zoom(&mut self, zoom: u8) {
+        self.pixel_zoom = zoom;
+        self.transform.scale.x = 1.0 / self.pixel_zoom as f32;
+        self.transform.scale.y = 1.0 / self.pixel_zoom as f32;
+    }
+
+    pub fn update_anima(&mut self, delta: Duration) {
         if !self.scale_animator.if_finished() {
-            let result = self.scale_animator.update(delta_ms);
+            let result = self.scale_animator.update(delta);
             // NOTE 这里不能修改 z 的 scale 因为这会影响到 near 和 far
             //  这在 3D 游戏中是需要逻辑但是 2D 不需要
             self.transform.scale.x = result;

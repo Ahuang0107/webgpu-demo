@@ -1,37 +1,38 @@
+use crate::assets::AssetsId;
 use std::ops::Range;
 
 #[derive(Clone, Debug)]
 pub enum RenderItem {
     Sprite {
         range: Range<u32>,
-        texture_id: u32,
+        texture_id: AssetsId,
         sort_key: f32,
     },
     BlendModeSprite {
         range: Range<u32>,
-        texture_id: u32,
+        texture_id: AssetsId,
         sort_key: f32,
     },
     BlurSprite {
         range: Range<u32>,
-        texture_id: u32,
+        texture_id: AssetsId,
         sort_key: f32,
     },
     SpriteMaskStart {
         range: Range<u32>,
-        texture_id: u32,
+        texture_id: AssetsId,
         sort_key: f32,
     },
     SpriteMaskEnd {
         range: Range<u32>,
-        texture_id: u32,
+        texture_id: AssetsId,
         sort_key: f32,
     },
 }
 
 impl RenderItem {
     #[inline]
-    pub fn texture_id(&self) -> u32 {
+    pub fn texture_id(&self) -> AssetsId {
         match self {
             RenderItem::Sprite { texture_id, .. } => *texture_id,
             RenderItem::BlendModeSprite { texture_id, .. } => *texture_id,

@@ -7,6 +7,7 @@ mod render_item;
 mod screen_repeat;
 mod sprite;
 mod sprite_instance;
+mod texture_store;
 mod transform;
 
 pub use blend_mode::*;
@@ -18,10 +19,9 @@ pub use render_item::*;
 pub use screen_repeat::*;
 pub use sprite::*;
 pub use sprite_instance::*;
+pub use texture_store::TextureStore;
 pub use transform::*;
 
-use glam::Vec2;
-use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
 pub const TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -44,7 +44,6 @@ pub struct Render {
     mask_start_pipeline: wgpu::RenderPipeline,
     mask_end_pipeline: wgpu::RenderPipeline,
     screen_repeat_pipeline: wgpu::RenderPipeline,
-    textures: HashMap<u32, (Vec2, wgpu::BindGroup)>,
 }
 
 impl Render {
@@ -357,7 +356,6 @@ impl Render {
             mask_start_pipeline,
             mask_end_pipeline,
             screen_repeat_pipeline,
-            textures: HashMap::new(),
         })
     }
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -419,76 +417,11 @@ impl Render {
             self.grab_texture_bind_group = grab_texture_bind_group;
         }
     }
-    pub fn load_texture_raw(&mut self, image_bytes: &[u8]) -> u32 {
-        let image = image::load_from_memory(image_bytes).unwrap();
-        let image = image.to_rgba8();
-        self.load_texture(&image)
-    }
-    pub fn load_texture(&mut self, image: &image::RgbaImage) -> u32 {
-        let image_size = wgpu::Extent3d {
-            width: image.width(),
-            height: image.height(),
-            depth_or_array_layers: 1,
-        };
-        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Example Texture"),
-            size: image_size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: TEXTURE_FORMAT,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        self.queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                aspect: wgpu::TextureAspect::All,
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-            },
-            &image,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(4 * image.width()),
-                rows_per_image: Some(image.height()),
-            },
-            image_size,
-        );
-
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = self
-            .device
-            .create_sampler(&wgpu::SamplerDescriptor::default());
-        let texture_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &self.texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-            ],
-            label: None,
-        });
-
-        let key = self.textures.len() as u32;
-        self.textures.insert(
-            key,
-            (
-                Vec2::new(image.width() as f32, image.height() as f32),
-                texture_bind_group,
-            ),
-        );
-        key
-    }
     pub fn render(
-        &mut self,
+        &self,
+        texture_store: &TextureStore,
         camera: &Camera2D,
-        sprites: &[&Sprite],
+        sprites: &Vec<&Sprite>,
         screen_repeat: Option<&ScreenRepeat>,
     ) {
         #[cfg(feature = "profiling")]
@@ -544,7 +477,7 @@ impl Render {
         let mut sprite_instances: Vec<SpriteInstance> = Vec::with_capacity(sprites.len());
         for (index, sprite) in sprites.into_iter().enumerate() {
             let index = index as u32;
-            if let Some((image_size, _)) = self.textures.get(&sprite.texture_id) {
+            if let Some((image_size, _)) = texture_store.get(&sprite.texture_id) {
                 let sprite_instance = SpriteInstance::from(
                     &sprite.calculate_transform(*image_size),
                     &sprite.calculate_uv_offset_scale(*image_size),
@@ -610,7 +543,7 @@ impl Render {
 
         {
             if let Some(screen_repeat) = screen_repeat {
-                if let Some((_, texture)) = self.textures.get(&screen_repeat.texture_id) {
+                if let Some((_, texture)) = texture_store.get(&screen_repeat.texture_id) {
                     let screen_repeat_uniform = screen_repeat.get_uniform();
                     let screen_repeat_uniform_buffer =
                         self.device
@@ -680,7 +613,7 @@ impl Render {
             #[cfg(feature = "profiling")]
             profiling::scope!("Draw Items");
             for render_item in render_items {
-                if let Some((_, texture)) = self.textures.get(&render_item.texture_id()) {
+                if let Some((_, texture)) = texture_store.get(&render_item.texture_id()) {
                     match render_item {
                         RenderItem::Sprite { .. } => {
                             render_pass.set_pipeline(&self.render_pipeline);

@@ -1,18 +1,20 @@
+use std::time::Duration;
+
 #[derive(Debug, Default)]
 pub struct EasingAnimator {
     start: f32,
     end: f32,
-    duration_ms: u64,
-    elapsed_ms: u64,
+    duration: Duration,
+    elapsed: Duration,
 }
 
 impl EasingAnimator {
-    pub fn new(start: f32, end: f32, duration_ms: u64) -> EasingAnimator {
+    pub fn new(start: f32, end: f32, duration: Duration) -> EasingAnimator {
         EasingAnimator {
             start,
             end,
-            duration_ms,
-            elapsed_ms: 0,
+            duration,
+            elapsed: Duration::ZERO,
         }
     }
 
@@ -20,12 +22,13 @@ impl EasingAnimator {
         self.end
     }
 
-    pub fn update(&mut self, delta_ms: u64) -> f32 {
-        self.elapsed_ms += delta_ms;
-        if self.elapsed_ms >= self.duration_ms {
+    pub fn update(&mut self, delta: Duration) -> f32 {
+        self.elapsed += delta;
+        if self.elapsed >= self.duration {
             return self.end;
         }
-        let mut progress = ease_out_cubic(self.elapsed_ms as f32 / self.duration_ms as f32);
+        let mut progress =
+            ease_out_cubic(self.elapsed.as_micros() as f32 / self.duration.as_micros() as f32);
         if progress > 0.96 {
             progress = 1.0;
         }
@@ -33,7 +36,7 @@ impl EasingAnimator {
     }
 
     pub fn if_finished(&self) -> bool {
-        self.elapsed_ms >= self.duration_ms
+        self.elapsed >= self.duration
     }
 }
 

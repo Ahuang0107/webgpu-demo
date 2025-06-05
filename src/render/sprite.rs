@@ -1,10 +1,11 @@
+use crate::assets::AssetsId;
 use crate::{BlendMode, Color, Rect, Transform};
 use glam::{Affine3A, Quat, Vec2, Vec4};
 
 #[derive(Copy, Clone, Debug, Default)]
 pub struct Sprite {
     pub transform: Transform,
-    pub texture_id: u32,
+    pub texture_id: AssetsId,
     /// Select an area of the texture
     pub rect: Option<Rect>,
     /// Change the on-screen size of the sprite

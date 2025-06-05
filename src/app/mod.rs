@@ -1,17 +1,18 @@
 mod edit_mode;
+mod in_game;
+mod main_menu;
 
 use super::assets::*;
+use crate::app::in_game::InGame;
+use crate::app::main_menu::MainMenu;
 use crate::input::Input;
-use crate::utils::collect_sprites;
-use crate::{App, AppConfig, Audio, Camera2D, Color, Fps, Render, ScreenRepeat, Sprite, Transform};
+use crate::{App, AppConfig, Audio, Camera2D, Fps, Render, Sprite, TextureStore, Transform};
 use glam::{Vec2, Vec3};
-use isometric_engine::*;
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use wgpu::SurfaceError;
 use winit::dpi::PhysicalSize;
-use winit::event::{MouseButton, WindowEvent};
+use winit::event::WindowEvent;
 use winit::keyboard::KeyCode;
 use winit::window::Window;
 
@@ -19,10 +20,9 @@ pub struct AppData {
     config: AppConfig,
     input: Input,
     render: Render,
+    texture_store: TextureStore,
     audio: Audio,
     camera: Camera2D,
-    sprites: Vec<Sprite>,
-    screen_repeat: ScreenRepeat,
     size: PhysicalSize<u32>,
     if_size_changed: bool,
     fps: Fps,
@@ -30,18 +30,22 @@ pub struct AppData {
     #[cfg(target_arch = "wasm32")]
     if_focused: bool,
     ui_cursor: Sprite,
-    package: Package,
-    scene: Scene,
-    image_map: HashMap<MetaModel, u32>,
+    app_state: AppState,
+    next_app_state: Option<AppState>,
+    main_menu: MainMenu,
+    in_game: InGame,
 }
 
+#[derive(Debug, Default)]
 pub enum AppState {
+    #[default]
     MainMenu,
+    InGame,
 }
 
 impl App for AppData {
     async fn new(window: Arc<Window>) -> Self {
-        let mut render = Render::new(window.clone())
+        let render = Render::new(window.clone())
             .await
             .expect("Failed to create render");
         let mut audio = Audio::default();
@@ -59,11 +63,10 @@ impl App for AppData {
             window.inner_size().width as f32,
             window.inner_size().height as f32,
         ));
-        camera.transform.translation.x = 620.0;
-        camera.transform.translation.y = 600.0;
-        camera.zoom_in();
-        camera.near = -2000.0;
-        let ui_cursor_image_handle = render.load_texture_raw(UI_CURSOR);
+
+        let mut texture_store = TextureStore::default();
+
+        let ui_cursor_image_handle = texture_store.load_texture_raw(&render, UI_CURSOR);
         let ui_cursor = Sprite {
             transform: Transform::from_translation(Vec3::new(0.0, 0.0, 500.0)),
             texture_id: ui_cursor_image_handle,
@@ -71,29 +74,15 @@ impl App for AppData {
             ..Default::default()
         };
 
-        let scene = Scene::from_bytes(SCENE_SIDEBOARD);
-        let package = Package::unpack_from_bytes(PACKAGE_SIDEBOARD).unwrap();
-        let mut image_map: HashMap<MetaModel, u32> =
-            HashMap::with_capacity(package.sprite_image_map.len());
-        for (key, image) in package.sprite_image_map.iter() {
-            image_map.insert(*key, render.load_texture(image));
-        }
-
-        let screen_repeat = ScreenRepeat {
-            texture_id: render.load_texture_raw(BG_CHECKER),
-            offset: Vec2::ZERO,
-            scale: 1.0 / camera.transform.scale.truncate(),
-            color: Color::from((107, 13, 56)),
-        };
+        let main_menu = MainMenu::new(&render, &mut texture_store, &mut camera);
 
         Self {
             config: AppConfig::default(),
             input: Input::default(),
             render,
+            texture_store,
             audio,
             camera,
-            sprites: Vec::new(),
-            screen_repeat,
             size: window.inner_size(),
             // 默认为 true 确保渲染第一帧前会调整 surface 大小
             if_size_changed: true,
@@ -101,19 +90,20 @@ impl App for AppData {
             #[cfg(target_arch = "wasm32")]
             if_focused: false,
             ui_cursor,
-            package,
-            scene,
-            image_map,
+            app_state: AppState::default(),
+            next_app_state: None,
+            main_menu,
+            in_game: InGame::default(),
         }
+    }
+
+    fn get_config(&self) -> &AppConfig {
+        &self.config
     }
 
     fn set_window_resized(&mut self, new_size: PhysicalSize<u32>) {
         self.size = new_size;
         self.if_size_changed = true;
-    }
-
-    fn get_config(&self) -> &AppConfig {
-        &self.config
     }
 
     fn on_window_input(&mut self, event: &WindowEvent) {
@@ -131,7 +121,10 @@ impl App for AppData {
 
         self.audio.clean_finished_sink();
 
-        let camera = &mut self.camera;
+        if let Some(next_app_state) = self.next_app_state.take() {
+            self.app_state = next_app_state;
+        }
+
         if self.input.if_keyboard_just_pressed(&KeyCode::KeyF) {
             self.config.fullscreen = true;
         }
@@ -158,73 +151,35 @@ impl App for AppData {
                 sink.set_volume(1.0);
             }
         }
-        if self.input.if_keyboard_just_pressed(&KeyCode::KeyS) {
-            // TODO 这里不能简单的直接序列化，存档需要有一些额外的操作，有些物品是不需要持久化状态的，所以需要保存时将状态重置到初始状态。
-            std::fs::write(
-                "src/assets/scenes/SideBoardScene.json",
-                self.scene.to_bytes(),
-            )
-            .unwrap();
-            log::info!("Saved scene");
-        }
-        if self.input.if_keyboard_just_pressed(&KeyCode::KeyZ) {
-            camera.zoom_in();
-        }
-        if self.input.if_keyboard_just_pressed(&KeyCode::KeyX) {
-            camera.zoom_out();
-        }
-        if self.input.if_keyboard_just_pressed(&KeyCode::ArrowLeft) {
-            camera.transform.translation.x -= 1.0;
-        }
-        if self.input.if_keyboard_just_pressed(&KeyCode::ArrowRight) {
-            camera.transform.translation.x += 1.0;
-        }
-        if self.input.if_keyboard_just_pressed(&KeyCode::ArrowUp) {
-            camera.transform.translation.y += 1.0;
-        }
-        if self.input.if_keyboard_just_pressed(&KeyCode::ArrowDown) {
-            camera.transform.translation.y -= 1.0;
-        }
-        if self.input.if_keyboard_just_pressed(&KeyCode::KeyT) {
-            self.scene
-                .take_out_new_item()
-                .expect("Failed to take out-new-item");
-        }
         if self.input.if_keyboard_just_pressed(&KeyCode::KeyP) {
             self.audio.play_sound_with_volume("bgm", 0.4);
         }
 
-        camera.update_anima(delta.as_millis() as u64);
-        self.screen_repeat.scale = 1.0 / self.camera.transform.scale.truncate();
+        // TODO 需要支持基于屏幕坐标来渲染 ui
+        //  同时每个场景应该有自己的 camera 而不是公用一个 camera
+        // let world_position = self
+        //     .camera
+        //     .viewport_to_world(Vec2::new(
+        //         self.input.cursor_pos().x as f32,
+        //         self.input.cursor_pos().y as f32,
+        //     ))
+        //     .truncate();
+        // self.ui_cursor.transform.translation.x = world_position.x;
+        // self.ui_cursor.transform.translation.y = world_position.y;
 
-        let world_position = self
-            .camera
-            .viewport_to_world(Vec2::new(
-                self.input.cursor_pos().x as f32,
-                self.input.cursor_pos().y as f32,
-            ))
-            .truncate();
-        self.ui_cursor.transform.translation.x = world_position.x;
-        self.ui_cursor.transform.translation.y = world_position.y;
-        let click_type = if self.input.if_mouse_just_pressed(&MouseButton::Left) {
-            1
-        } else if self.input.if_mouse_just_pressed(&MouseButton::Right) {
-            2
-        } else {
-            0
-        };
-        let _sync_result = self
-            .scene
-            .sync(
-                delta.as_micros() as u64,
-                [world_position.x as i32, world_position.y as i32],
-                click_type,
-                self.package.items.as_slice(),
-                &mut self.audio,
-            )
-            .expect("failed to sync scene");
-
-        self.sprites = collect_sprites(&self.scene, &self.image_map);
+        match self.app_state {
+            AppState::MainMenu => {
+                if self.input.if_keyboard_just_pressed(&KeyCode::KeyS) {
+                    self.next_app_state = Some(AppState::InGame);
+                    self.in_game =
+                        InGame::new(&self.render, &mut self.texture_store, &mut self.camera);
+                }
+            }
+            AppState::InGame => {
+                self.in_game
+                    .update(delta, &self.input, &mut self.audio, &mut self.camera);
+            }
+        }
 
         self.input.fresh();
     }
@@ -245,10 +200,16 @@ impl App for AppData {
 
         // 窗口最小化时只更新数据不渲染画面
         if self.size.width > 0 && self.size.height > 0 {
-            let mut sprites: Vec<&Sprite> = self.sprites.iter().collect();
-            sprites.push(&self.ui_cursor);
-            self.render
-                .render(&self.camera, sprites.as_slice(), Some(&self.screen_repeat));
+            match self.app_state {
+                AppState::MainMenu => {
+                    self.main_menu
+                        .render(&self.render, &self.texture_store, &self.camera);
+                }
+                AppState::InGame => {
+                    self.in_game
+                        .render(&self.render, &self.texture_store, &self.camera);
+                }
+            }
         }
         self.fps.update();
         #[cfg(feature = "profiling")]

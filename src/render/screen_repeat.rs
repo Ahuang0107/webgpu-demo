@@ -1,9 +1,10 @@
+use crate::assets::AssetsId;
 use crate::Color;
 use glam::{Vec2, Vec4};
 
 #[derive(Copy, Clone, Debug, Default)]
 pub struct ScreenRepeat {
-    pub texture_id: u32,
+    pub texture_id: AssetsId,
     pub offset: Vec2,
     pub scale: Vec2,
     pub color: Color,
