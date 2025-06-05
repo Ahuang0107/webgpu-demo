@@ -79,17 +79,23 @@ impl InGame {
         if input.if_keyboard_just_pressed(&KeyCode::KeyX) {
             camera.zoom_out();
         }
-        if input.if_keyboard_just_pressed(&KeyCode::ArrowLeft) {
-            camera.transform.translation.x -= 1.0;
+        let camera_move_step = 2.0;
+        let background_move_step = camera_move_step * 0.4;
+        if input.if_keyboard_pressed(&KeyCode::ArrowLeft) {
+            camera.transform.translation.x -= camera_move_step;
+            self.screen_repeat.offset.x -= background_move_step;
         }
-        if input.if_keyboard_just_pressed(&KeyCode::ArrowRight) {
-            camera.transform.translation.x += 1.0;
+        if input.if_keyboard_pressed(&KeyCode::ArrowRight) {
+            camera.transform.translation.x += camera_move_step;
+            self.screen_repeat.offset.x += background_move_step;
         }
-        if input.if_keyboard_just_pressed(&KeyCode::ArrowUp) {
-            camera.transform.translation.y += 1.0;
+        if input.if_keyboard_pressed(&KeyCode::ArrowUp) {
+            camera.transform.translation.y += camera_move_step;
+            self.screen_repeat.offset.y -= background_move_step;
         }
-        if input.if_keyboard_just_pressed(&KeyCode::ArrowDown) {
-            camera.transform.translation.y -= 1.0;
+        if input.if_keyboard_pressed(&KeyCode::ArrowDown) {
+            camera.transform.translation.y -= camera_move_step;
+            self.screen_repeat.offset.y += background_move_step;
         }
 
         camera.update_anima(delta);

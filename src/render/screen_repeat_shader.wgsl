@@ -1,6 +1,7 @@
 struct ScreenRepeat {
     uv_offset_scale: vec4<f32>,
     color: vec4<f32>,
+    viewport: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> screen_repeat: ScreenRepeat;
@@ -50,10 +51,23 @@ fn vs_main(
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let texture_size_u32 = textureDimensions(sprite_texture);
     let texture_size = vec2<f32>(f32(texture_size_u32.x), f32(texture_size_u32.y));
+    // 首先是根据镜头缩放，来调整图案重复的间隔
     let texture_size_fixed = texture_size * screen_repeat.uv_offset_scale.zw;
-    let uv = in.clip_position.xy + screen_repeat.uv_offset_scale.xy;
-    let fixed_uv = vec2((uv.x % texture_size_fixed.x) / texture_size_fixed.x, (uv.y % texture_size_fixed.y) / texture_size_fixed.y);
-    let texture = textureSample(sprite_texture, sprite_sampler, fixed_uv);
+
+    // 需要基于镜头中心位置缩放，所以将 clip_position 从以左上角为原点，转换成以屏幕中心为原点
+    // NOTE in.clip_position.xy 就是基于左上角的当前片元的坐标，跟 png 的 xy 坐标类似
+    var clip_position = in.clip_position.xy - screen_repeat.viewport.zw / vec2<f32>(2.0, 2.0);
+    let clip_offset = screen_repeat.uv_offset_scale.xy * screen_repeat.uv_offset_scale.zw;
+    clip_position = clip_position + clip_offset;
+
+    // 根据 clip_position 和图案重复间隔，计算对应的 UV
+    var uv = vec2(
+        (clip_position.x % texture_size_fixed.x) / texture_size_fixed.x,
+        (clip_position.y % texture_size_fixed.y) / texture_size_fixed.y
+    );
+    // 因为 clip_position 转成基于屏幕中心为原点了，所以算出来的 uv 可能是负的，需要转成正的
+    uv = (uv + vec2(1.0)) % vec2(1.0);
+    let texture = textureSample(sprite_texture, sprite_sampler, uv);
 
     return rgba_blend_multiply(texture, screen_repeat.color);
 }

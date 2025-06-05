@@ -127,15 +127,20 @@ impl Camera2D {
     }
 
     #[inline(always)]
+    pub fn get_viewport(&self) -> Vec4 {
+        Vec4::new(
+            self.viewport_origin.x,
+            self.viewport_origin.y,
+            self.viewport_size.x,
+            self.viewport_size.y,
+        )
+    }
+
+    #[inline(always)]
     pub fn get_view_uniform(&self) -> ViewUniform {
         ViewUniform {
             clip_from_world: self.get_clip_from_world(),
-            viewport: Vec4::new(
-                self.viewport_origin.x,
-                self.viewport_origin.y,
-                self.viewport_size.x,
-                self.viewport_size.y,
-            ),
+            viewport: self.get_viewport(),
         }
     }
 

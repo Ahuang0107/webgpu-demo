@@ -544,7 +544,7 @@ impl Render {
         {
             if let Some(screen_repeat) = screen_repeat {
                 if let Some((_, texture)) = texture_store.get(&screen_repeat.texture_id) {
-                    let screen_repeat_uniform = screen_repeat.get_uniform();
+                    let screen_repeat_uniform = screen_repeat.get_uniform(camera);
                     let screen_repeat_uniform_buffer =
                         self.device
                             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
