@@ -35,13 +35,15 @@ impl InGame {
         let screen_repeat = ScreenRepeat {
             texture_id: texture_store.load_texture_raw(render, BG_CHECKER),
             offset: Vec2::ZERO,
-            scale: 1.0 / camera.transform.scale.truncate(),
+            scale: 1.0 / camera.get_scale(),
             color: Color::from((107, 13, 56)),
         };
 
         let scene = Scene::from_bytes(SCENE_SIDEBOARD);
-        camera.transform.translation.x = scene.size()[0] as f32 / 2.0;
-        camera.transform.translation.y = scene.size()[1] as f32 / 2.0;
+        camera.set_translation(Vec2::new(
+            scene.size()[0] as f32 / 2.0,
+            scene.size()[1] as f32 / 2.0,
+        ));
         let package = Package::unpack_from_bytes(PACKAGE_SIDEBOARD).unwrap();
         let mut image_map: HashMap<MetaModel, AssetsId> =
             HashMap::with_capacity(package.sprite_image_map.len());
@@ -80,26 +82,27 @@ impl InGame {
             camera.zoom_out();
         }
         let camera_move_step = 2.0;
-        let background_move_step = camera_move_step * 0.4;
         if input.if_keyboard_pressed(&KeyCode::ArrowLeft) {
-            camera.transform.translation.x -= camera_move_step;
-            self.screen_repeat.offset.x -= background_move_step;
+            camera.add_translation(Vec2::new(-camera_move_step, 0.0));
         }
         if input.if_keyboard_pressed(&KeyCode::ArrowRight) {
-            camera.transform.translation.x += camera_move_step;
-            self.screen_repeat.offset.x += background_move_step;
+            camera.add_translation(Vec2::new(camera_move_step, 0.0));
         }
         if input.if_keyboard_pressed(&KeyCode::ArrowUp) {
-            camera.transform.translation.y += camera_move_step;
-            self.screen_repeat.offset.y -= background_move_step;
+            camera.add_translation(Vec2::new(0.0, camera_move_step));
         }
         if input.if_keyboard_pressed(&KeyCode::ArrowDown) {
-            camera.transform.translation.y -= camera_move_step;
-            self.screen_repeat.offset.y += background_move_step;
+            camera.add_translation(Vec2::new(0.0, -camera_move_step));
         }
 
         camera.update_anima(delta);
-        self.screen_repeat.scale = 1.0 / camera.transform.scale.truncate();
+        self.screen_repeat.scale = 1.0 / camera.get_scale();
+
+        let Some(scene) = &self.scene else {
+            return;
+        };
+        let scene_center = Vec2::new(scene.size()[0] as f32, scene.size()[1] as f32);
+        self.screen_repeat.offset = (camera.get_translation() - scene_center) * 0.4;
 
         if let (Some(scene), Some(package)) = (&mut self.scene, &mut self.package) {
             if input.if_keyboard_just_pressed(&KeyCode::KeyS) {

@@ -21,7 +21,7 @@ pub struct Camera2D {
     /// 目前来看应该始终保持 [0.5, 0.5] 不会有其他情况
     pub viewport_origin: Vec2,
     pub viewport_size: Vec2,
-    pub transform: Transform,
+    transform: Transform,
     /// sprite 的 z 越大，表示约 near（靠近镜头）
     pub near: f32,
     pub far: f32,
@@ -31,6 +31,9 @@ pub struct Camera2D {
     /// 限制放大倍率只有 x1 x2 x4 x8
     pub pixel_zoom: u8,
     pub scale_animator: EasingAnimator,
+    /// 限制镜头展示的世界空间范围，需要配合 transform.scale 来判断镜头实际上可以显示的范围，
+    /// 并根据 viewport_size 来判断镜头的 transform.translation 范围
+    pub word_boundary: Option<Vec4>,
 }
 
 impl Camera2D {
@@ -44,10 +47,32 @@ impl Camera2D {
             far: 1.0,
             pixel_zoom: 1,
             scale_animator: EasingAnimator::default(),
+            word_boundary: None,
         }
     }
 
-    pub fn zoom_in(&mut self) {
+    pub fn get_scale(&self) -> Vec2 {
+        self.transform.scale.truncate()
+    }
+
+    pub fn get_translation(&self) -> Vec2 {
+        self.transform.translation.truncate()
+    }
+
+    pub fn set_translation(&mut self, translation: Vec2) {
+        self.transform.translation.x = translation.x;
+        self.transform.translation.y = translation.y;
+    }
+
+    pub fn add_translation(&mut self, translation: Vec2) {
+        self.transform.translation.x += translation.x;
+        self.transform.translation.y += translation.y;
+        if let Some(_boundary) = self.word_boundary {
+            // TODO
+        }
+    }
+
+    pub fn zoom_in(&mut self) -> bool {
         if self.pixel_zoom < 8 {
             if self.scale_animator.if_finished() {
                 // NOTE 确保在可以执行动画的情况下再修改 pixel_zoom
@@ -57,11 +82,13 @@ impl Camera2D {
                     1.0 / self.pixel_zoom as f32,
                     Duration::from_millis(500),
                 );
+                return true;
             }
         }
+        false
     }
 
-    pub fn zoom_out(&mut self) {
+    pub fn zoom_out(&mut self) -> bool {
         if self.pixel_zoom > 1 {
             if self.scale_animator.if_finished() {
                 self.pixel_zoom /= 2;
@@ -70,8 +97,10 @@ impl Camera2D {
                     1.0 / self.pixel_zoom as f32,
                     Duration::from_millis(500),
                 );
+                return true;
             }
         }
+        false
     }
 
     pub fn set_zoom(&mut self, zoom: u8) {

@@ -26,14 +26,10 @@ impl MainMenu {
             ..Default::default()
         };
 
-        let mut camera = Camera2D::new(Vec2::new(
+        let camera = Camera2D::new(Vec2::new(
             window_size.width as f32,
             window_size.height as f32,
         ));
-        camera.transform.translation.x = 0.0;
-        camera.transform.translation.y = 0.0;
-        camera.transform.scale.x = 1.0;
-        camera.transform.scale.y = 1.0;
 
         MainMenu { camera, start }
     }
