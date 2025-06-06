@@ -100,7 +100,7 @@ impl<T: App> AppHandler<T> {
     fn config_window(&mut self) {
         let window = self.window.as_mut().unwrap();
         window.set_title(self.title);
-        window.set_cursor_visible(false);
+        // window.set_cursor_visible(false);
 
         #[cfg(target_arch = "wasm32")]
         {
@@ -194,7 +194,7 @@ impl<T: App + 'static> ApplicationHandler for AppHandler<T> {
         self.last_render_time = instant::Instant::now();
 
         let mut window_attributes = Window::default_attributes();
-        window_attributes.inner_size = Some(Size::Physical(PhysicalSize::new(1280, 720)));
+        window_attributes.inner_size = Some(Size::Physical(PhysicalSize::new(1920, 1080)));
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
         self.window = Some(window.clone());
         self.config_window();

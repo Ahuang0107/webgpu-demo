@@ -85,7 +85,7 @@ impl Render {
             format: TEXTURE_FORMAT,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::AutoNoVsync,
+            present_mode: wgpu::PresentMode::AutoVsync,
             desired_maximum_frame_latency: 2,
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
             view_formats: vec![],
