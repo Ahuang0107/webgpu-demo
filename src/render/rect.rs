@@ -20,6 +20,14 @@ impl Rect {
     }
 
     #[inline]
+    pub const fn new_u32(x0: u32, y0: u32, x1: u32, y1: u32) -> Self {
+        Self {
+            min: Vec2::new(x0 as f32, y0 as f32),
+            max: Vec2::new(x1 as f32, y1 as f32),
+        }
+    }
+
+    #[inline]
     pub fn from_center_size(origin: Vec2, size: Vec2) -> Self {
         assert!(size.cmpge(Vec2::ZERO).all(), "Rect size must be positive");
         let half_size = size / 2.0;

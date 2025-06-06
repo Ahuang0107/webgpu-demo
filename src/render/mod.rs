@@ -9,6 +9,7 @@ mod sprite;
 mod sprite_instance;
 mod texture_store;
 mod transform;
+mod ui_sprite;
 
 pub use blend_mode::*;
 pub use camera::*;
@@ -21,6 +22,7 @@ pub use sprite::*;
 pub use sprite_instance::*;
 pub use texture_store::TextureStore;
 pub use transform::*;
+pub use ui_sprite::*;
 
 use wgpu::util::DeviceExt;
 

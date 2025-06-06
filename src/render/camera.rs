@@ -72,6 +72,10 @@ impl Camera2D {
         }
     }
 
+    pub fn if_can_zoom_in(&self) -> bool {
+        self.pixel_zoom < 8
+    }
+
     pub fn zoom_in(&mut self) -> bool {
         if self.pixel_zoom < 8 {
             if self.scale_animator.if_finished() {
@@ -86,6 +90,10 @@ impl Camera2D {
             }
         }
         false
+    }
+
+    pub fn if_can_zoom_out(&self) -> bool {
+        self.pixel_zoom > 1
     }
 
     pub fn zoom_out(&mut self) -> bool {

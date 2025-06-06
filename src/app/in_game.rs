@@ -1,8 +1,13 @@
-use crate::assets::{AssetsId, BG_CHECKER, PACKAGE_SIDEBOARD, SCENE_SIDEBOARD};
+use crate::assets::{
+    AssetsId, BG_CHECKER, PACKAGE_SIDEBOARD, SCENE_SIDEBOARD, UI_ZOOM_IN, UI_ZOOM_IN_SLICE,
+    UI_ZOOM_OUT, UI_ZOOM_OUT_SLICE,
+};
 use crate::input::Input;
 use crate::utils::collect_sprites;
-use crate::{Audio, Camera2D, Color, Render, ScreenRepeat, Sprite, TextureStore};
-use glam::Vec2;
+use crate::{
+    Audio, Camera2D, Color, Render, ScreenRepeat, Sprite, TextureStore, Transform, UiSprite,
+};
+use glam::{Vec2, Vec3};
 use isometric_engine::{MetaModel, Package, Scene, SerdeFrom};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -15,6 +20,8 @@ pub struct InGame {
     camera: Camera2D,
     sprites: Vec<Sprite>,
     screen_repeat: ScreenRepeat,
+    ui_zoom_in_sprite: UiSprite,
+    ui_zoom_out_sprite: UiSprite,
     package: Option<Package>,
     scene: Option<Scene>,
     image_map: HashMap<MetaModel, AssetsId>,
@@ -33,10 +40,34 @@ impl InGame {
         camera.set_zoom(2);
 
         let screen_repeat = ScreenRepeat {
-            texture_id: texture_store.load_texture_raw(render, BG_CHECKER),
+            texture_id: BG_CHECKER.0,
             offset: Vec2::ZERO,
             scale: 1.0 / camera.get_scale(),
             color: Color::from((107, 13, 56)),
+        };
+        let ui_zoom_in_sprite = UiSprite {
+            sprite: Sprite {
+                transform: Transform::from_translation(Vec3::new(0.0, 0.0, 500.0)),
+                texture_id: UI_ZOOM_IN.0,
+                rect: Some(UI_ZOOM_IN_SLICE[0]),
+                ..Default::default()
+            },
+            size: Vec2::new(36.0, 36.0).into(),
+            left: Some(60.0.into()),
+            top: Some(16.0.into()),
+            ..Default::default()
+        };
+        let ui_zoom_out_sprite = UiSprite {
+            sprite: Sprite {
+                transform: Transform::from_translation(Vec3::new(0.0, 0.0, 500.0)),
+                texture_id: UI_ZOOM_OUT.0,
+                rect: Some(UI_ZOOM_OUT_SLICE[0]),
+                ..Default::default()
+            },
+            size: Vec2::new(36.0, 36.0).into(),
+            left: Some(16.0.into()),
+            top: Some(16.0.into()),
+            ..Default::default()
         };
 
         let scene = Scene::from_bytes(SCENE_SIDEBOARD);
@@ -55,6 +86,8 @@ impl InGame {
             camera,
             sprites: Vec::new(),
             screen_repeat,
+            ui_zoom_in_sprite,
+            ui_zoom_out_sprite,
             package: Some(package),
             scene: Some(scene),
             image_map,
@@ -75,12 +108,39 @@ impl InGame {
             .truncate();
 
         let camera = &mut self.camera;
-        if input.if_keyboard_just_pressed(&KeyCode::KeyZ) {
-            camera.zoom_in();
+        if !camera.if_can_zoom_in() {
+            self.ui_zoom_in_sprite.sprite.color.set_opacity(0.5);
+            self.ui_zoom_in_sprite.stop_anima();
+        } else {
+            if self.ui_zoom_in_sprite.contains(cursor_world_pos) {
+                self.ui_zoom_in_sprite.sprite.color.set_opacity(1.0);
+                self.ui_zoom_in_sprite.start_anima(&UI_ZOOM_IN_SLICE);
+                if input.if_mouse_just_pressed(&MouseButton::Left) {
+                    // TODO 这里与 ui 交互了，就不能与场景交互了
+                    camera.zoom_in();
+                }
+            } else {
+                self.ui_zoom_in_sprite.sprite.color.set_opacity(0.7);
+                self.ui_zoom_in_sprite.stop_anima();
+            }
         }
-        if input.if_keyboard_just_pressed(&KeyCode::KeyX) {
-            camera.zoom_out();
+
+        if !camera.if_can_zoom_out() {
+            self.ui_zoom_out_sprite.sprite.color.set_opacity(0.5);
+            self.ui_zoom_out_sprite.stop_anima();
+        } else {
+            if self.ui_zoom_out_sprite.contains(cursor_world_pos) {
+                self.ui_zoom_out_sprite.sprite.color.set_opacity(1.0);
+                self.ui_zoom_out_sprite.start_anima(&UI_ZOOM_OUT_SLICE);
+                if input.if_mouse_just_pressed(&MouseButton::Left) {
+                    camera.zoom_out();
+                }
+            } else {
+                self.ui_zoom_out_sprite.sprite.color.set_opacity(0.7);
+                self.ui_zoom_out_sprite.stop_anima();
+            }
         }
+
         let camera_move_step = 2.0;
         if input.if_keyboard_pressed(&KeyCode::ArrowLeft) {
             camera.add_translation(Vec2::new(-camera_move_step, 0.0));
@@ -103,6 +163,8 @@ impl InGame {
         };
         let scene_center = Vec2::new(scene.size()[0] as f32, scene.size()[1] as f32);
         self.screen_repeat.offset = (camera.get_translation() - scene_center) * 0.4;
+        self.ui_zoom_in_sprite.update(camera, delta);
+        self.ui_zoom_out_sprite.update(camera, delta);
 
         if let (Some(scene), Some(package)) = (&mut self.scene, &mut self.package) {
             if input.if_keyboard_just_pressed(&KeyCode::KeyS) {
@@ -138,10 +200,13 @@ impl InGame {
     }
 
     pub fn render(&self, render: &Render, texture_store: &TextureStore) {
+        let mut sprites: Vec<&Sprite> = self.sprites.iter().collect();
+        sprites.push(&self.ui_zoom_in_sprite.sprite);
+        sprites.push(&self.ui_zoom_out_sprite.sprite);
         render.render(
             texture_store,
             &self.camera,
-            &self.sprites.iter().collect(),
+            &sprites,
             Some(&self.screen_repeat),
         );
     }

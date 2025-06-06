@@ -59,16 +59,22 @@ impl App for AppData {
         // audio.play_sound("ambient");
 
         let mut texture_store = TextureStore::default();
+        texture_store.load_texture_raw(&render, UI_CURSOR);
+        texture_store.load_texture_raw(&render, BG_CHECKER);
+        texture_store.load_texture_raw(&render, UI_ZOOM_IN);
+        texture_store.load_texture_raw(&render, UI_ZOOM_OUT);
+        texture_store.load_texture_raw(&render, START_NORMAL);
+        texture_store.load_texture_raw(&render, START_HOVER);
 
-        let ui_cursor_image_handle = texture_store.load_texture_raw(&render, UI_CURSOR);
         let ui_cursor = Sprite {
             transform: Transform::from_translation(Vec3::new(0.0, 0.0, 500.0)),
-            texture_id: ui_cursor_image_handle,
+            texture_id: UI_CURSOR.0,
             anchor: Vec2::new(-0.5, 0.5),
             ..Default::default()
         };
 
         let main_menu = MainMenu::new(&render, &mut texture_store, window.inner_size());
+        let in_game = InGame::new(&render, &mut texture_store, window.inner_size());
 
         Self {
             config: AppConfig::default(),
@@ -83,10 +89,10 @@ impl App for AppData {
             #[cfg(target_arch = "wasm32")]
             if_focused: false,
             ui_cursor,
-            app_state: AppState::default(),
+            app_state: AppState::InGame,
             next_app_state: None,
             main_menu,
-            in_game: InGame::default(),
+            in_game,
         }
     }
 

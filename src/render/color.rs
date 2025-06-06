@@ -24,6 +24,14 @@ impl Color {
             Self::Hsb(hsb) => hsb.as_rgba(),
         }
     }
+
+    pub fn set_opacity(&mut self, opacity: f32) {
+        let opacity = (opacity * 255.0).min(255.0) as u8;
+        match self {
+            Self::Rgba(rgba) => rgba.0.w = opacity,
+            Self::Hsb(hsb) => hsb.opacity = opacity,
+        }
+    }
 }
 
 impl Default for Color {
@@ -67,6 +75,7 @@ pub struct HsbColor {
     ///
     /// = max(R,G,B)/255
     brightness: u8,
+    opacity: u8,
 }
 
 impl HsbColor {
@@ -76,6 +85,7 @@ impl HsbColor {
             hue,
             saturation,
             brightness,
+            opacity: 255,
         };
         if result.hue >= 360 {
             result.hue = 0;
@@ -124,7 +134,7 @@ impl HsbColor {
             ((r + m) * 255.0).ceil() as u8,
             ((g + m) * 255.0).ceil() as u8,
             ((b + m) * 255.0).ceil() as u8,
-            255,
+            self.opacity,
         ])
     }
 }

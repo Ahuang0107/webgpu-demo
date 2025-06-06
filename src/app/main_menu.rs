@@ -14,12 +14,10 @@ pub struct MainMenu {
 
 impl MainMenu {
     pub fn new(
-        render: &Render,
-        texture_store: &mut TextureStore,
+        _render: &Render,
+        _texture_store: &mut TextureStore,
         window_size: PhysicalSize<u32>,
     ) -> Self {
-        texture_store.load_texture_raw(render, START_NORMAL);
-        texture_store.load_texture_raw(render, START_HOVER);
         let start = Sprite {
             transform: Transform::from_translation(Vec3::new(0.0, 0.0, 400.0)),
             texture_id: START_NORMAL.0,
