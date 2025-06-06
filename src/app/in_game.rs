@@ -5,7 +5,7 @@ use crate::assets::{
 use crate::input::Input;
 use crate::utils::collect_sprites;
 use crate::{
-    Audio, Camera2D, Color, Render, ScreenRepeat, Sprite, TextureStore, Transform, UiSprite,
+    Audio, Camera2D, Color, Rect, Render, ScreenRepeat, Sprite, TextureStore, Transform, UiSprite,
 };
 use glam::{Vec2, Vec3};
 use isometric_engine::{MetaModel, Package, Scene, SerdeFrom};
@@ -99,13 +99,7 @@ impl InGame {
     }
 
     pub fn update(&mut self, delta: Duration, input: &Input, audio: &mut Audio) {
-        let cursor_world_pos = self
-            .camera
-            .viewport_to_world(Vec2::new(
-                input.cursor_pos().x as f32,
-                input.cursor_pos().y as f32,
-            ))
-            .truncate();
+        let cursor_world_pos = self.camera.viewport_to_world(input.cursor_pos()).truncate();
 
         let camera = &mut self.camera;
         if !camera.if_can_zoom_in() {
@@ -141,7 +135,7 @@ impl InGame {
             }
         }
 
-        let camera_move_step = 2.0;
+        let camera_move_step = 4.0;
         if input.if_keyboard_pressed(&KeyCode::ArrowLeft) {
             camera.add_translation(Vec2::new(-camera_move_step, 0.0));
         }
@@ -154,13 +148,49 @@ impl InGame {
         if input.if_keyboard_pressed(&KeyCode::ArrowDown) {
             camera.add_translation(Vec2::new(0.0, -camera_move_step));
         }
-
-        camera.update_anima(delta);
-        self.screen_repeat.scale = 1.0 / camera.get_scale();
+        if input.cursor_pos().x < 48.0 {
+            if !input.if_keyboard_pressed(&KeyCode::ArrowLeft)
+                && !input.if_keyboard_pressed(&KeyCode::ArrowRight)
+            {
+                camera.add_translation(Vec2::new(-camera_move_step, 0.0));
+            }
+            // let boundary_deep = 96.0 - input.cursor_pos().x;
+        }
+        if input.cursor_pos().x > (camera.viewport_size.x - 48.0) {
+            if !input.if_keyboard_pressed(&KeyCode::ArrowLeft)
+                && !input.if_keyboard_pressed(&KeyCode::ArrowRight)
+            {
+                camera.add_translation(Vec2::new(camera_move_step, 0.0));
+            }
+            // let boundary_deep = 96.0 - input.cursor_pos().x;
+        }
+        if input.cursor_pos().y < 48.0 {
+            if !input.if_keyboard_pressed(&KeyCode::ArrowUp)
+                && !input.if_keyboard_pressed(&KeyCode::ArrowDown)
+            {
+                camera.add_translation(Vec2::new(0.0, camera_move_step));
+            }
+        }
+        if input.cursor_pos().y > (camera.viewport_size.y - 48.0) {
+            if !input.if_keyboard_pressed(&KeyCode::ArrowUp)
+                && !input.if_keyboard_pressed(&KeyCode::ArrowDown)
+            {
+                camera.add_translation(Vec2::new(0.0, -camera_move_step));
+            }
+        }
 
         let Some(scene) = &self.scene else {
             return;
         };
+        let scene_world_boundary = Rect::from_corners(
+            Vec2::new(0.0, 48.0),
+            Vec2::new(scene.size()[0] as f32, scene.size()[1] as f32 - 48.0),
+        );
+
+        camera.update_anima(delta);
+        camera.update_word_boundary(Some(scene_world_boundary));
+        self.screen_repeat.scale = 1.0 / camera.get_scale();
+
         let scene_center = Vec2::new(scene.size()[0] as f32, scene.size()[1] as f32);
         self.screen_repeat.offset = (camera.get_translation() - scene_center) * 0.4;
         self.ui_zoom_in_sprite.update(camera, delta);

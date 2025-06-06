@@ -31,9 +31,6 @@ pub struct Camera2D {
     /// 限制放大倍率只有 x1 x2 x4 x8
     pub pixel_zoom: u8,
     pub scale_animator: EasingAnimator,
-    /// 限制镜头展示的世界空间范围，需要配合 transform.scale 来判断镜头实际上可以显示的范围，
-    /// 并根据 viewport_size 来判断镜头的 transform.translation 范围
-    pub word_boundary: Option<Vec4>,
 }
 
 impl Camera2D {
@@ -47,7 +44,6 @@ impl Camera2D {
             far: 1.0,
             pixel_zoom: 1,
             scale_animator: EasingAnimator::default(),
-            word_boundary: None,
         }
     }
 
@@ -67,9 +63,6 @@ impl Camera2D {
     pub fn add_translation(&mut self, translation: Vec2) {
         self.transform.translation.x += translation.x;
         self.transform.translation.y += translation.y;
-        if let Some(_boundary) = self.word_boundary {
-            // TODO
-        }
     }
 
     pub fn if_can_zoom_in(&self) -> bool {
@@ -124,6 +117,36 @@ impl Camera2D {
             //  这在 3D 游戏中是需要逻辑但是 2D 不需要
             self.transform.scale.x = result;
             self.transform.scale.y = result;
+        }
+    }
+
+    /// 限制镜头展示的世界空间范围，需要配合 transform.scale 来判断镜头实际上可以显示的范围，
+    /// 并根据 viewport_size 来判断镜头的 transform.translation 范围
+    pub fn update_word_boundary(&mut self, word_boundary: Option<Rect>) {
+        if let Some(boundary) = word_boundary {
+            let size = self.viewport_size * self.transform.scale.truncate();
+            let viewport = Rect::from_center_size(self.transform.translation.truncate(), size);
+
+            // 只有镜头尺寸比边界限制尺寸比要小的情况下，才需要保持镜头在边界尺寸范围内
+            if viewport.size().x < boundary.size().x {
+                if viewport.left() < boundary.left() {
+                    self.transform.translation.x += boundary.left() - viewport.left();
+                } else if viewport.right() > boundary.right() {
+                    self.transform.translation.x -= viewport.right() - boundary.right();
+                }
+            } else {
+                self.transform.translation.x = boundary.center().x;
+            }
+
+            if viewport.size().y < boundary.size().y {
+                if viewport.bottom() < boundary.bottom() {
+                    self.transform.translation.y += boundary.bottom() - viewport.bottom();
+                } else if viewport.top() > boundary.top() {
+                    self.transform.translation.y -= viewport.top() - boundary.top();
+                }
+            } else {
+                self.transform.translation.y = boundary.center().y;
+            }
         }
     }
 

@@ -43,7 +43,32 @@ impl Rect {
     }
 
     #[inline]
+    pub fn center(&self) -> Vec2 {
+        (self.min + self.max) / 2.0
+    }
+
+    #[inline]
     pub fn contains(&self, point: Vec2) -> bool {
         (point.cmpge(self.min) & point.cmple(self.max)).all()
+    }
+
+    #[inline]
+    pub fn left(&self) -> f32 {
+        self.min.x
+    }
+
+    #[inline]
+    pub fn right(&self) -> f32 {
+        self.max.x
+    }
+
+    #[inline]
+    pub fn top(&self) -> f32 {
+        self.max.y
+    }
+
+    #[inline]
+    pub fn bottom(&self) -> f32 {
+        self.min.y
     }
 }
