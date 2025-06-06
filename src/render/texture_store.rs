@@ -18,6 +18,9 @@ impl TextureStore {
         render: &Render,
         (assets_id, assets_bytes): (AssetsId, &'static [u8]),
     ) -> AssetsId {
+        if self.textures.contains_key(&assets_id) {
+            return assets_id;
+        }
         let image = image::load_from_memory(assets_bytes).unwrap();
         let image = image.to_rgba8();
         self.load_texture_with_key(render, &image, Some(assets_id))
