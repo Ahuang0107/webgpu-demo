@@ -8,7 +8,7 @@ pub static AUDIO_RECORD_PRESS: &'static [u8] = include_bytes!("audio/record_pres
 
 pub static UI_CURSOR: (AssetsId, &'static [u8]) = (
     AssetsId::new(b"bbe14c53-ab76-40b4-8383-1c3da2ca0a2b"),
-    include_bytes!("ui-cursor.png"),
+    include_bytes!("ui/ui-cursor.png"),
 );
 pub static BG_CHECKER: (AssetsId, &'static [u8]) = (
     AssetsId::new(b"903c0509-5e63-49ad-aa14-7c9efb603fbd"),
