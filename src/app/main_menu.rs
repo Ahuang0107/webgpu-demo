@@ -1,4 +1,5 @@
 use crate::assets::{START_HOVER, START_NORMAL};
+use crate::egui_render::EguiRender;
 use crate::input::Input;
 use crate::{AppState, Audio, Camera2D, Rect, Render, Sprite, TextureStore, Transform};
 use glam::{Vec2, Vec3, Vec3Swizzles};
@@ -64,7 +65,18 @@ impl MainMenu {
         }
     }
 
-    pub fn render(&self, render: &Render, texture_store: &TextureStore) {
-        render.render(texture_store, &self.camera, &vec![&self.start], None);
+    pub fn render(
+        &self,
+        render: &Render,
+        texture_store: &TextureStore,
+        egui_render: &mut EguiRender,
+    ) {
+        render.render(
+            texture_store,
+            &self.camera,
+            &vec![&self.start],
+            None,
+            egui_render,
+        );
     }
 }

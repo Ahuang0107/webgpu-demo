@@ -4,6 +4,7 @@ pub struct Fps {
     frame_count: u32,
     last_log_instant: Instant,
     interval: Duration,
+    pub fps: f32,
 }
 
 impl Fps {
@@ -12,6 +13,7 @@ impl Fps {
             frame_count: 0,
             last_log_instant: Instant::now(),
             interval: Duration::from_secs(1),
+            fps: 0.0,
         }
     }
 
@@ -20,9 +22,7 @@ impl Fps {
         let now = Instant::now();
         let elapsed = now - self.last_log_instant;
         if elapsed >= self.interval {
-            let fps = self.frame_count as f32 / elapsed.as_secs_f32();
-            log::info!("FPS: {:.2}", fps);
-
+            self.fps = self.frame_count as f32 / elapsed.as_secs_f32();
             self.frame_count = 0;
             self.last_log_instant = now;
         }

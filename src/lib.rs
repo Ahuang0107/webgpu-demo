@@ -2,6 +2,7 @@ mod app;
 mod assets;
 mod audio;
 mod easing;
+mod egui_render;
 mod fps;
 mod framework;
 mod input;

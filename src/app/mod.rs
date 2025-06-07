@@ -1,10 +1,10 @@
-mod edit_mode;
 mod in_game;
 mod main_menu;
 
 use super::assets::*;
 use crate::app::in_game::InGame;
 use crate::app::main_menu::MainMenu;
+use crate::egui_render::EguiRender;
 use crate::input::Input;
 use crate::{App, AppConfig, Audio, Fps, Render, Sprite, TextureStore, Transform};
 use glam::{Vec2, Vec3};
@@ -20,6 +20,7 @@ pub struct AppData {
     config: AppConfig,
     input: Input,
     render: Render,
+    egui_render: EguiRender,
     texture_store: TextureStore,
     audio: Audio,
     size: PhysicalSize<u32>,
@@ -47,6 +48,15 @@ impl App for AppData {
         let render = Render::new(window.clone())
             .await
             .expect("Failed to create render");
+
+        let egui_render = EguiRender::new(
+            window.clone(),
+            &render.device,
+            crate::TEXTURE_FORMAT,
+            crate::MASK_TEXTURE_FORMAT,
+            &render.config,
+        );
+
         let mut audio = Audio::default();
         audio.resume_audio_context();
         audio.load_source("pickup", AUDIO_PICKUP.into());
@@ -80,6 +90,7 @@ impl App for AppData {
             config: AppConfig::default(),
             input: Input::default(),
             render,
+            egui_render,
             texture_store,
             audio,
             size: window.inner_size(),
@@ -106,6 +117,13 @@ impl App for AppData {
     }
 
     fn on_window_input(&mut self, event: &WindowEvent) {
+        // 如果交互事件已经被 egui 消费了，就不需要再传递下去了
+        // NOTE 这里包括 RedrawRequested 也会传递下来，所以 egui 也能接收到
+        //  但是 input 只会处理输入事件，所以不需要担心
+        // TODO 只是这里依旧不严谨，应该是当 cursor hover 或者 focus 时由 egui 消费交互事件，否则由 app 消费
+        if self.egui_render.handle_event(event).consumed {
+            return;
+        }
         self.input.handle_window_event(event);
     }
 
@@ -123,6 +141,15 @@ impl App for AppData {
         if let Some(next_app_state) = self.next_app_state.take() {
             self.app_state = next_app_state;
         }
+
+        self.fps.update();
+
+        self.egui_render.update(|ctx| {
+            egui::Window::new("Debug Window").show(ctx, |ui| {
+                ui.label("Debug Info:");
+                ui.label(format!("FPS: {:.0}", self.fps.fps));
+            });
+        });
 
         if self.input.if_keyboard_just_pressed(&KeyCode::KeyF) {
             self.config.fullscreen = true;
@@ -187,6 +214,8 @@ impl App for AppData {
             //  现在将 surface_configure 移回这里，性能大大增高，能到 4000 FPS，同时，也没有发现缩放窗口卡顿的问题
             //  虽然不知道之前缩放窗口卡顿的问题是为什么，但先这样吧
             self.render.resize(self.size.width, self.size.height);
+            self.egui_render.context.set_pixels_per_point(1.0);
+            self.egui_render.screen_descriptor.pixels_per_point = 1.0;
             self.if_size_changed = false;
         }
 
@@ -194,14 +223,15 @@ impl App for AppData {
         if self.size.width > 0 && self.size.height > 0 {
             match self.app_state {
                 AppState::MainMenu => {
-                    self.main_menu.render(&self.render, &self.texture_store);
+                    self.main_menu
+                        .render(&self.render, &self.texture_store, &mut self.egui_render);
                 }
                 AppState::InGame => {
-                    self.in_game.render(&self.render, &self.texture_store);
+                    self.in_game
+                        .render(&self.render, &self.texture_store, &mut self.egui_render);
                 }
             }
         }
-        self.fps.update();
         #[cfg(feature = "profiling")]
         profiling::finish_frame!();
 

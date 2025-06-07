@@ -2,6 +2,7 @@ use crate::assets::{
     AssetsId, BG_CHECKER, PACKAGE_SIDEBOARD, SCENE_SIDEBOARD, UI_ZOOM_IN, UI_ZOOM_IN_SLICE,
     UI_ZOOM_OUT, UI_ZOOM_OUT_SLICE,
 };
+use crate::egui_render::EguiRender;
 use crate::input::Input;
 use crate::utils::collect_sprites;
 use crate::{
@@ -229,7 +230,12 @@ impl InGame {
         }
     }
 
-    pub fn render(&self, render: &Render, texture_store: &TextureStore) {
+    pub fn render(
+        &self,
+        render: &Render,
+        texture_store: &TextureStore,
+        egui_render: &mut EguiRender,
+    ) {
         let mut sprites: Vec<&Sprite> = self.sprites.iter().collect();
         sprites.push(&self.ui_zoom_in_sprite.sprite);
         sprites.push(&self.ui_zoom_out_sprite.sprite);
@@ -238,6 +244,7 @@ impl InGame {
             &self.camera,
             &sprites,
             Some(&self.screen_repeat),
+            egui_render,
         );
     }
 }

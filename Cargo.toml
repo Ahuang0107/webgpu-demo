@@ -13,7 +13,10 @@ windows_wallpaper = ["windows"]
 [dependencies]
 isometric-engine = { path = "../../rust-project/isometric-engine" }
 winit = "0.30.10"
-wgpu = "25.0.0"
+wgpu = "24.0.3"
+egui = "0.31.1"
+egui-winit = "0.31.1"
+egui-wgpu = "0.31.1"
 parking_lot = "0.12"
 log = "0.4"
 bytemuck = { version = "1.12", features = ["derive"] }

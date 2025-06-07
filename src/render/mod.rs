@@ -24,6 +24,7 @@ pub use texture_store::TextureStore;
 pub use transform::*;
 pub use ui_sprite::*;
 
+use crate::egui_render::EguiRender;
 use wgpu::util::DeviceExt;
 
 pub const TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -32,7 +33,7 @@ pub const MASK_TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Stenci
 
 pub struct Render {
     pub surface: wgpu::Surface<'static>,
-    device: wgpu::Device,
+    pub device: wgpu::Device,
     queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
     uniform_bind_group_layout: wgpu::BindGroupLayout,
@@ -73,11 +74,14 @@ impl Render {
         let caps = surface.get_capabilities(&adapter);
         log::info!("capabilities: {caps:?}");
         let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default(),
-                ..Default::default()
-            })
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    required_features: wgpu::Features::empty(),
+                    required_limits: wgpu::Limits::default(),
+                    ..Default::default()
+                },
+                None,
+            )
             .await?;
         let size = window.inner_size();
         let config = wgpu::SurfaceConfiguration {
@@ -425,6 +429,7 @@ impl Render {
         camera: &Camera2D,
         sprites: &Vec<&Sprite>,
         screen_repeat: Option<&ScreenRepeat>,
+        egui_render: &mut EguiRender,
     ) {
         #[cfg(feature = "profiling")]
         profiling::scope!("Create Frame View");
@@ -682,6 +687,8 @@ impl Render {
                 }
             }
         }
+
+        egui_render.render(&self.device, &self.queue, &mut encoder, &frame_view);
 
         #[cfg(feature = "profiling")]
         profiling::scope!("Submit Commands");
