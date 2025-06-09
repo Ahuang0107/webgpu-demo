@@ -4,7 +4,6 @@ mod main_menu;
 use super::assets::*;
 use crate::app::in_game::InGame;
 use crate::app::main_menu::MainMenu;
-use crate::egui_render::EguiRender;
 use crate::input::Input;
 use crate::{App, AppConfig, Audio, Fps, Render, Sprite, TextureStore, Transform};
 use glam::{Vec2, Vec3};
@@ -20,7 +19,8 @@ pub struct AppData {
     config: AppConfig,
     input: Input,
     render: Render,
-    egui_render: EguiRender,
+    #[cfg(feature = "editor_mode")]
+    egui_render: crate::egui_render::EguiRender,
     texture_store: TextureStore,
     audio: Audio,
     size: PhysicalSize<u32>,
@@ -49,7 +49,8 @@ impl App for AppData {
             .await
             .expect("Failed to create render");
 
-        let egui_render = EguiRender::new(
+        #[cfg(feature = "editor_mode")]
+        let egui_render = crate::egui_render::EguiRender::new(
             window.clone(),
             &render.device,
             crate::TEXTURE_FORMAT,
@@ -90,6 +91,7 @@ impl App for AppData {
             config: AppConfig::default(),
             input: Input::default(),
             render,
+            #[cfg(feature = "editor_mode")]
             egui_render,
             texture_store,
             audio,
@@ -121,6 +123,7 @@ impl App for AppData {
         // NOTE 这里包括 RedrawRequested 也会传递下来，所以 egui 也能接收到
         //  但是 input 只会处理输入事件，所以不需要担心
         // TODO 只是这里依旧不严谨，应该是当 cursor hover 或者 focus 时由 egui 消费交互事件，否则由 app 消费
+        #[cfg(feature = "editor_mode")]
         if self.egui_render.handle_event(event).consumed {
             return;
         }
@@ -129,7 +132,10 @@ impl App for AppData {
 
     fn update(&mut self, delta: Duration) {
         #[cfg(target_arch = "wasm32")]
-        if self.input.if_mouse_just_pressed(&MouseButton::Left) {
+        if self
+            .input
+            .if_mouse_just_pressed(&winit::event::MouseButton::Left)
+        {
             if !self.if_focused {
                 self.if_focused = true;
                 self.audio.resume_audio_context();
@@ -144,6 +150,7 @@ impl App for AppData {
 
         self.fps.update();
 
+        #[cfg(feature = "editor_mode")]
         self.egui_render.update(|ctx| {
             egui::Window::new("Debug Window").show(ctx, |ui| {
                 ui.label("Debug Info:");
@@ -214,8 +221,11 @@ impl App for AppData {
             //  现在将 surface_configure 移回这里，性能大大增高，能到 4000 FPS，同时，也没有发现缩放窗口卡顿的问题
             //  虽然不知道之前缩放窗口卡顿的问题是为什么，但先这样吧
             self.render.resize(self.size.width, self.size.height);
-            self.egui_render.context.set_pixels_per_point(1.0);
-            self.egui_render.screen_descriptor.pixels_per_point = 1.0;
+            #[cfg(feature = "editor_mode")]
+            {
+                self.egui_render.context.set_pixels_per_point(1.0);
+                self.egui_render.screen_descriptor.pixels_per_point = 1.0;
+            }
             self.if_size_changed = false;
         }
 
@@ -223,12 +233,20 @@ impl App for AppData {
         if self.size.width > 0 && self.size.height > 0 {
             match self.app_state {
                 AppState::MainMenu => {
-                    self.main_menu
-                        .render(&self.render, &self.texture_store, &mut self.egui_render);
+                    self.main_menu.render(
+                        &self.render,
+                        &self.texture_store,
+                        #[cfg(feature = "editor_mode")]
+                        &mut self.egui_render,
+                    );
                 }
                 AppState::InGame => {
-                    self.in_game
-                        .render(&self.render, &self.texture_store, &mut self.egui_render);
+                    self.in_game.render(
+                        &self.render,
+                        &self.texture_store,
+                        #[cfg(feature = "editor_mode")]
+                        &mut self.egui_render,
+                    );
                 }
             }
         }

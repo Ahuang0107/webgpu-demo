@@ -2,6 +2,7 @@ mod app;
 mod assets;
 mod audio;
 mod easing;
+#[cfg(feature = "editor_mode")]
 mod egui_render;
 mod fps;
 mod framework;

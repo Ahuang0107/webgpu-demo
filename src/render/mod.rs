@@ -24,7 +24,6 @@ pub use texture_store::TextureStore;
 pub use transform::*;
 pub use ui_sprite::*;
 
-use crate::egui_render::EguiRender;
 use wgpu::util::DeviceExt;
 
 pub const TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -429,7 +428,7 @@ impl Render {
         camera: &Camera2D,
         sprites: &Vec<&Sprite>,
         screen_repeat: Option<&ScreenRepeat>,
-        egui_render: &mut EguiRender,
+        #[cfg(feature = "editor_mode")] egui_render: &mut crate::egui_render::EguiRender,
     ) {
         #[cfg(feature = "profiling")]
         profiling::scope!("Create Frame View");
@@ -688,6 +687,7 @@ impl Render {
             }
         }
 
+        #[cfg(feature = "editor_mode")]
         egui_render.render(&self.device, &self.queue, &mut encoder, &frame_view);
 
         #[cfg(feature = "profiling")]

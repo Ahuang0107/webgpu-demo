@@ -9,14 +9,15 @@ name = "webgpu_demo_lib"
 
 [features]
 windows_wallpaper = ["windows"]
+editor_mode = ["egui", "egui-winit", "egui-wgpu"]
 
 [dependencies]
 isometric-engine = { path = "../../rust-project/isometric-engine" }
 winit = "0.30.10"
 wgpu = "24.0.3"
-egui = "0.31.1"
-egui-winit = "0.31.1"
-egui-wgpu = "0.31.1"
+egui = { version = "0.31.1", optional = true }
+egui-winit = { version = "0.31.1", optional = true }
+egui-wgpu = { version = "0.31.1", optional = true }
 parking_lot = "0.12"
 log = "0.4"
 bytemuck = { version = "1.12", features = ["derive"] }
