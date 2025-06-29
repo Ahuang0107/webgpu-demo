@@ -70,7 +70,10 @@ impl InGame {
             ..Default::default()
         };
 
-        let scene = Scene::from_bytes(SCENE_SIDEBOARD);
+        let mut scene = Scene::from_bytes(SCENE_SIDEBOARD);
+        // NOTE 目前每个 PA 排序完后的 logic_order_table 序列化是不存储的，所以重新加载时，需要重新进行一遍排序来更新 logic_order_table
+        //  用于之后的光标选择判断
+        scene.update_all();
         camera.set_translation(Vec2::new(
             scene.size()[0] as f32 / 2.0,
             scene.size()[1] as f32 / 2.0,
